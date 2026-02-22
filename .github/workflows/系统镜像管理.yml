@@ -20,7 +20,7 @@ on:
         default: false
         type: boolean
       system_type:
-        description: '系统类型'
+        description: '系统类型 (仅当 delete 时使用)'
         required: false
         default: 'debian-desktop'
         type: choice
@@ -33,16 +33,6 @@ on:
         description: '内核版本号 (仅当 action 为 build 时生效)'
         required: false
         default: '6.18'
-      desktop_environment:
-        description: '桌面环境 (仅当 action 为 build 时生效)'
-        required: false
-        default: 'phosh-full'
-        type: choice
-        options:
-          - ''
-          - phosh-core
-          - phosh-full
-          - phosh-phone
 
 # 工作流配置
 jobs:
@@ -73,9 +63,23 @@ jobs:
               gh release list --limit 100 | grep "${{ inputs.system_type }}" | awk '{print $2}' | xargs -I {} gh release delete --yes
             fi
           elif [ "${{ inputs.action }}" = "build" ]; then
-            echo "触发 ${{ inputs.system_type }} 构建..."
-            # 触发构建工作流
-            gh workflow run "构建系统镜像" -f system_type="${{ inputs.system_type }}" -f kernel_version="${{ inputs.kernel_version }}" -f desktop_environment="${{ inputs.desktop_environment }}"
+            echo "一键触发所有 4 个系统类型的构建..."
+            
+            # 桌面版：传递 phosh-core
+            echo "触发 debian-desktop 构建..."
+            gh workflow run "构建系统镜像" -f system_type="debian-desktop" -f kernel_version="${{ inputs.kernel_version }}" -f desktop_environment="phosh-core"
+            
+            echo "触发 ubuntu-desktop 构建..."
+            gh workflow run "构建系统镜像" -f system_type="ubuntu-desktop" -f kernel_version="${{ inputs.kernel_version }}" -f desktop_environment="phosh-core"
+            
+            # Server 版：不传递 desktop_environment
+            echo "触发 debian-server 构建..."
+            gh workflow run "构建系统镜像" -f system_type="debian-server" -f kernel_version="${{ inputs.kernel_version }}"
+            
+            echo "触发 ubuntu-server 构建..."
+            gh workflow run "构建系统镜像" -f system_type="ubuntu-server" -f kernel_version="${{ inputs.kernel_version }}"
+            
+            echo "所有 4 个系统类型的构建已触发！"
           else
             echo "未知操作: ${{ inputs.action }}"
             exit 1
