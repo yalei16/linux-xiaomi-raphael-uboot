@@ -83,11 +83,3 @@ jobs:
             alsa-xiaomi-raphael.deb
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      
-      # 上传编译产物作为工作流制品
-      - name: 上传内核包作为工作流制品
-        uses: actions/upload-artifact@v4
-        with:
-          name: kernel-packages-v${{ inputs.kernel_version }}
-          path: |
-            *.deb

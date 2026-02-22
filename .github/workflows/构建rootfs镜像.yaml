@@ -239,15 +239,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       
-      # 上传镜像作为工作流制品
-      - name: 上传镜像作为工作流制品
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ env.SYSTEM_TYPE }}-image-v${{ env.KERNEL_VERSION }}
-          path: |
-            rootfs.7z
-            xiaomi-k20pro-boot.img
-      
       # 清理临时文件
       - name: 清理临时文件
         if: always()
