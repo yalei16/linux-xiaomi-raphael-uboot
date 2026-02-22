@@ -87,15 +87,18 @@
 # 1. 进入 Fastboot 模式
 adb reboot bootloader
 
-# 2. 刷入 boot 镜像
+# 2. 擦除分区
+fastboot erase dtbo
+fastboot erase boot
+fastboot erase cache
+fastboot erase userdata
+
+# 3. 刷入 boot 镜像
 fastboot flash cache xiaomi-k20pro-boot.img
 fastboot flash boot u-boot.img
 
-# 3. 刷入系统镜像（需要先解压 rootfs.7z）
+# 4. 刷入系统镜像（需要先解压 rootfs.7z）
 fastboot flash userdata rootfs.img
-
-# 4. 擦除dtbo分区
-fastboot erase dtbo
 
 # 5. 重启设备
 fastboot reboot
