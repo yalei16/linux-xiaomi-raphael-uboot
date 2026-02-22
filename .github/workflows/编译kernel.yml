@@ -53,7 +53,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.ccache
-          key: ccache-kernel-${{ inputs.kernel_version }}-${{ github.run_id }}
+          key: ccache-kernel-${{ inputs.kernel_version }}-${{ github.sha }}
           restore-keys: |
             ccache-kernel-${{ inputs.kernel_version }}-
             ccache-kernel-
@@ -62,7 +62,7 @@ jobs:
       - name: 编译内核
         run: |          
           # 执行内核编译脚本
-          sudo -E sh raphael-kernel_build.sh ${{ inputs.kernel_version }}
+          sudo -E bash raphael-kernel_build.sh ${{ inputs.kernel_version }}
       
       # 显示 ccache 统计信息
       - name: 显示 ccache 统计

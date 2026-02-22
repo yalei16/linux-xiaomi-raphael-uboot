@@ -2,13 +2,20 @@
 set -e  # 遇到错误立即退出
 
 # 配置 ccache 支持 Clang
-export CCACHE_DIR=/home/runner/.ccache
+CCACHE_DIR=/home/runner/.ccache
+export CCACHE_DIR
 export PATH="/usr/lib/ccache:$PATH"
 
-# 设置 ccache 编译器检查方式（使用内容而不是时间戳）
-export CCACHE_COMPILERCHECK=content
+# 确保 ccache 目录存在
+mkdir -p "$CCACHE_DIR"
 
-# 设置 ccache 最大缓存大小（工作流中也会设置，这里作为备份）
+# 创建 ccache 配置文件
+cat > "$CCACHE_DIR/ccache.conf" << EOF
+max_size = 10G
+compiler_check = content
+EOF
+
+# 设置 ccache 最大缓存大小
 ccache -M 10G 2>/dev/null || true
 
 # 克隆指定版本的内核源码
