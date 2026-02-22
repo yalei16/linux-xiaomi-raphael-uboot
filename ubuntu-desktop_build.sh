@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 set -e  # 遇到错误立即退出
 
 # 检查是否以 root 权限运行

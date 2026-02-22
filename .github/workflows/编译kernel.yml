@@ -47,8 +47,6 @@ jobs:
         run: |
           ccache -M 10G
           ccache -s
-          # 设置 ccache 目录权限，确保 sudo 用户也能访问
-          sudo chown -R root:root ~/.ccache || true
       
       # 缓存 ccache 目录
       - name: 缓存 ccache

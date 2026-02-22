@@ -2,7 +2,7 @@
 set -e  # 遇到错误立即退出
 
 # 配置 ccache 支持 Clang
-export CCACHE_DIR=/root/.ccache
+export CCACHE_DIR=/home/runner/.ccache
 export PATH="/usr/lib/ccache:$PATH"
 
 # 设置 ccache 编译器检查方式（使用内容而不是时间戳）
