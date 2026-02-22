@@ -4,7 +4,7 @@ name: 系统镜像管理
 
 # 手动触发
 on:
-  repository_dispatch:
+  workflow_dispatch:
     inputs:
       action:
         description: '操作类型'
@@ -20,7 +20,7 @@ on:
         default: false
         type: boolean
       system_type:
-        description: '系统类型 (仅当 action 为 build 时生效)'
+        description: '系统类型'
         required: false
         default: 'debian-desktop'
         type: choice
