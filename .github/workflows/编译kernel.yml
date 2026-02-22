@@ -48,9 +48,9 @@ jobs:
             ccache-kernel-${{ inputs.kernel_version }}-llvm21-
       
       # 编译内核
-      - name: 编译内核
-        run: |          
-          sudo -E bash raphael-kernel_build.sh ${{ inputs.kernel_version }}
+      # - name: 编译内核
+      #   run: |          
+      #     sudo -E bash raphael-kernel_build.sh ${{ inputs.kernel_version }}
       
       # 创建 GitHub Release 并上传产物
       - name: 创建 Release 并上传产物
