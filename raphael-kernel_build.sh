@@ -15,9 +15,6 @@ max_size = 10G
 compiler_check = content
 EOF
 
-# 设置 ccache 最大缓存大小
-ccache -M 10G 2>/dev/null || true
-
 # 克隆指定版本的内核源码
 git clone https://github.com/GengWei1997/linux.git --branch raphael-$1 --depth 1 linux
 
