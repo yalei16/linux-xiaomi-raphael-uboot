@@ -1,14 +1,6 @@
 #!/bin/bash
 set -e  # 遇到错误立即退出
 
-export CCACHE_DIR=/home/runner/work/linux-xiaomi-raphael-uboot/linux-xiaomi-raphael-uboot/.ccache
-export CCACHE_COMPRESS=1
-export CCACHE_COMPRESSLEVEL=6
-export PATH="/usr/lib/ccache:$PATH"
-
-# 配置 ccache
-ccache -M 10G
-
 # 克隆指定版本的内核源码
 git clone https://github.com/GengWei1997/linux.git --branch raphael-$1 --depth 1 linux
 
