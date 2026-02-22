@@ -43,7 +43,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /home/runner/work/linux-xiaomi-raphael-uboot/linux-xiaomi-raphael-uboot/.ccache
-          key: ccache-kernel-${{ inputs.kernel_version }}-llvm21-${{ github.run_id }}
+          key: ccache-kernel-${{ inputs.kernel_version }}-llvm21
           restore-keys: |
             ccache-kernel-${{ inputs.kernel_version }}-llvm21-
       
