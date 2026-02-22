@@ -1,13 +1,10 @@
 #!/bin/bash
 set -e  # 遇到错误立即退出
 
-# 配置 ccache 支持 Clang
-CCACHE_DIR=/home/runner/.ccache
-export CCACHE_DIR
+export CCACHE_DIR=/home/runner/.ccache
+export CCACHE_COMPRESS=1
+export CCACHE_COMPRESSLEVEL=6
 export PATH="/usr/lib/ccache:$PATH"
-
-# 确保 ccache 目录存在
-mkdir -p /home/runner/.ccache
 
 # 配置 ccache
 ccache -M 10G
