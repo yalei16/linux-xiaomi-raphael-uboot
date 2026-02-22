@@ -7,13 +7,10 @@ export CCACHE_DIR
 export PATH="/usr/lib/ccache:$PATH"
 
 # 确保 ccache 目录存在
-mkdir -p "$CCACHE_DIR"
+mkdir -p /home/runner/.ccache
 
-# 创建 ccache 配置文件
-cat > "$CCACHE_DIR/ccache.conf" << EOF
-max_size = 10G
-compiler_check = content
-EOF
+# 配置 ccache
+ccache -M 10G -C
 
 # 克隆指定版本的内核源码
 git clone https://github.com/GengWei1997/linux.git --branch raphael-$1 --depth 1 linux
