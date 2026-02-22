@@ -87,15 +87,18 @@
 # 1. 进入 Fastboot 模式
 adb reboot bootloader
 
-# 2. 刷入 boot 镜像
+# 2. 擦除分区
+fastboot erase dtbo
+fastboot erase boot
+fastboot erase cache
+fastboot erase userdata
+
+# 3. 刷入 boot 镜像
 fastboot flash cache xiaomi-k20pro-boot.img
 fastboot flash boot u-boot.img
 
-# 3. 刷入系统镜像（需要先解压 rootfs.7z）
+# 4. 刷入系统镜像（需要先解压 rootfs.7z）
 fastboot flash userdata rootfs.img
-
-# 4. 擦除dtbo分区
-fastboot erase dtbo
 
 # 5. 重启设备
 fastboot reboot
@@ -116,7 +119,7 @@ fastboot reboot
 - 感谢 Debian 和 Ubuntu 社区
 - 感谢 Phosh 桌面环境开发团队
 - 感谢所有贡献者和用户的支持
-- [@cuicanmx](https://github.com/cuicanmx) - 提供帮助以及创新思路
+- [@璀璨梦星](https://github.com/ccmx200) - 提供帮助以及创新思路
 - [@map220v](https://github.com/map220v/ubuntu-xiaomi-nabu) - 原项目
 - [@Pc1598](https://github.com/Pc1598) - sm8150-mainline-raphael内核维护
 - [Aospa-raphael-unofficial/linux](https://github.com/Aospa-raphael-unofficial/linux) - 内核项目
