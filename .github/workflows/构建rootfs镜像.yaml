@@ -120,16 +120,16 @@ jobs:
           # 根据系统类型执行对应的构建脚本
           case "${{ env.SYSTEM_TYPE }}" in
             "debian-desktop")
-              sudo sh debian-desktop_build.sh "${{ env.DESKTOP_ENV }}" "${{ env.KERNEL_VERSION }}"
+              sudo bash debian-desktop_build.sh "${{ env.DESKTOP_ENV }}" "${{ env.KERNEL_VERSION }}"
               ;;
             "debian-server")
-              sudo sh debian-server_build.sh "${{ env.KERNEL_VERSION }}"
+              sudo bash debian-server_build.sh "${{ env.KERNEL_VERSION }}"
               ;;
             "ubuntu-desktop")
-              sudo sh ubuntu-desktop_build.sh "${{ env.DESKTOP_ENV }}" "${{ env.KERNEL_VERSION }}"
+              sudo bash ubuntu-desktop_build.sh "${{ env.DESKTOP_ENV }}" "${{ env.KERNEL_VERSION }}"
               ;;
             "ubuntu-server")
-              sudo sh ubuntu-server_build.sh "${{ env.KERNEL_VERSION }}"
+              sudo bash ubuntu-server_build.sh "${{ env.KERNEL_VERSION }}"
               ;;
             *)
               echo "错误: 未知的系统类型: ${{ env.SYSTEM_TYPE }}"

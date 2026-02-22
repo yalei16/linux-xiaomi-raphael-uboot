@@ -64,12 +64,6 @@ jobs:
           # 执行内核编译脚本
           sudo -E bash raphael-kernel_build.sh ${{ inputs.kernel_version }}
       
-      # 显示 ccache 统计信息
-      - name: 显示 ccache 统计
-        if: always()
-        run: |
-          sudo ccache -s
-      
       # 获取当前时间戳
       - name: 获取构建时间
         id: get-timestamp
