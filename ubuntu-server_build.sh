@@ -13,7 +13,8 @@ UBUNTU_VERSION="noble"
 
 # 创建根文件系统镜像
 truncate -s 3G rootfs.img
-mkfs.ext4 rootfs.img
+# --- 修改点 1: 格式化为 XFS ---
+mkfs.xfs -f rootfs.img
 mkdir rootdir
 mount -o loop rootfs.img rootdir
 
@@ -51,8 +52,8 @@ EOF
 chroot rootdir apt update
 chroot rootdir apt upgrade -y
 
-# 安装基础软件包
-chroot rootdir apt install -y bash-completion sudo apt-utils ssh openssh-server nano network-manager systemd-boot initramfs-tools chrony curl wget locales tzdata language-pack-zh-hans dnsmasq iptables iproute2
+# --- 修改点 2: 安装基础软件包，添加 xfsprogs ---
+chroot rootdir apt install -y bash-completion sudo apt-utils ssh openssh-server nano network-manager systemd-boot initramfs-tools chrony curl wget locales tzdata language-pack-zh-hans dnsmasq iptables iproute2 xfsprogs
 
 # 设置时区和语言
 echo "Asia/Shanghai" > rootdir/etc/timezone
@@ -142,8 +143,8 @@ WantedBy=multi-user.target
 EOF
 chroot rootdir systemctl enable usb-ncm
 
-# 配置 fstab
-echo "PARTLABEL=userdata / ext4 errors=remount-ro,x-systemd.growfs 0 1
+# --- 修改点 3: 配置 fstab，将 ext4 改为 xfs ---
+echo "PARTLABEL=userdata / xfs defaults,noatime 0 1
 PARTLABEL=cache /boot vfat umask=0077 0 1" | tee rootdir/etc/fstab
 
 # 创建默认用户
@@ -223,10 +224,10 @@ umount rootdir
 
 rm -d rootdir
 
-# 设置文件系统 UUID
-tune2fs -U ee8d3593-59b1-480e-a3b6-4fefb17ee7d8 rootfs.img
+# --- 修改点 4: 设置文件系统 UUID，使用 xfs_admin 替代 tune2fs ---
+xfs_admin -U ee8d3593-59b1-480e-a3b6-4fefb17ee7d8 rootfs.img
 
 echo 'cmdline for legacy boot: "root=PARTLABEL=userdata"'
 
-# 压缩 rootfs 镜像
+# 压缩 rootfs 镜像 (已删除末尾多余的 mkfs.xfs)
 7z a rootfs.7z rootfs.img
