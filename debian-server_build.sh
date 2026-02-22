@@ -13,7 +13,7 @@ DEBIAN_VERSION="trixie"
 
 # 创建根文件系统镜像
 truncate -s 3G rootfs.img
-mkfs.ext4 rootfs.img
+mkfs.xfs -f rootfs.img
 mkdir rootdir
 mount -o loop rootfs.img rootdir
 
@@ -52,7 +52,7 @@ chroot rootdir apt update
 chroot rootdir apt upgrade -y
 
 # 安装基础软件包
-chroot rootdir apt install -y bash-completion sudo apt-utils ssh openssh-server nano network-manager systemd-boot initramfs-tools chrony curl wget locales tzdata fonts-wqy-microhei dnsmasq iptables iproute2
+chroot rootdir apt install -y bash-completion sudo apt-utils ssh openssh-server nano network-manager systemd-boot initramfs-tools chrony curl wget locales tzdata fonts-wqy-microhei dnsmasq iptables iproute2 xfsprogs
 
 # 设置时区和语言
 echo "Asia/Shanghai" > rootdir/etc/timezone
@@ -148,7 +148,7 @@ EOF
 chroot rootdir systemctl enable usb-ncm
 
 # 配置 fstab
-echo "PARTLABEL=userdata / ext4 errors=remount-ro,x-systemd.growfs 0 1
+echo "PARTLABEL=userdata / xfs defaults,noatime 0 1
 PARTLABEL=cache /boot vfat umask=0077 0 1" | tee rootdir/etc/fstab
 
 # 创建默认用户
@@ -222,7 +222,7 @@ umount rootdir
 rm -d rootdir
 
 # 设置文件系统 UUID
-tune2fs -U ee8d3593-59b1-480e-a3b6-4fefb17ee7d8 rootfs.img
+xfs_admin -U ee8d3593-59b1-480e-a3b6-4fefb17ee7d8 rootfs.img
 
 echo 'cmdline for legacy boot: "root=PARTLABEL=userdata"'
 
