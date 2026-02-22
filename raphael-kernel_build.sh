@@ -1,6 +1,14 @@
 #!/bin/bash
 set -e  # 遇到错误立即退出
 
+# 配置 ccache
+export CCACHE_DIR=/home/runner/.ccache
+export PATH="/usr/lib/ccache:$PATH"
+export CC="ccache aarch64-linux-gnu-gcc"
+export CXX="ccache aarch64-linux-gnu-g++"
+export HOSTCC="ccache gcc"
+export HOSTCXX="ccache g++"
+
 # 克隆指定版本的内核源码
 git clone https://github.com/GengWei1997/linux.git --branch raphael-$1 --depth 1 linux
 

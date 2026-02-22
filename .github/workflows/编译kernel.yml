@@ -36,17 +36,39 @@ jobs:
           sudo apt update
           sudo apt install -y build-essential gcc-aarch64-linux-gnu bc flex bison \
           7zip kmod bash cpio binutils tar git wget dpkg libssl-dev \
-          libelf-dev python3 rsync debhelper-compat libdw-dev
+          libelf-dev python3 rsync debhelper-compat libdw-dev ccache
           
           wget https://apt.llvm.org/llvm.sh
           chmod +x llvm.sh
           sudo ./llvm.sh 21
+      
+      # 配置 ccache
+      - name: 配置 ccache
+        run: |
+          ccache -M 10G
+          ccache -s
+      
+      # 缓存 ccache 目录
+      - name: 缓存 ccache
+        uses: actions/cache@v4
+        with:
+          path: ~/.ccache
+          key: ccache-kernel-${{ inputs.kernel_version }}-${{ github.run_id }}
+          restore-keys: |
+            ccache-kernel-${{ inputs.kernel_version }}-
+            ccache-kernel-
       
       # 编译内核
       - name: 编译内核
         run: |          
           # 执行内核编译脚本
           sudo sh raphael-kernel_build.sh ${{ inputs.kernel_version }}
+      
+      # 显示 ccache 统计信息
+      - name: 显示 ccache 统计
+        if: always()
+        run: |
+          ccache -s
       
       # 获取当前时间戳
       - name: 获取构建时间
