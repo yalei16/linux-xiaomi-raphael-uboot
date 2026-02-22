@@ -1,13 +1,15 @@
 #!/bin/bash
 set -e  # 遇到错误立即退出
 
-# 配置 ccache
-export CCACHE_DIR=/home/runner/.ccache
+# 配置 ccache 支持 Clang
+export CCACHE_DIR=/root/.ccache
 export PATH="/usr/lib/ccache:$PATH"
-export CC="ccache aarch64-linux-gnu-gcc"
-export CXX="ccache aarch64-linux-gnu-g++"
-export HOSTCC="ccache gcc"
-export HOSTCXX="ccache g++"
+
+# 设置 ccache 编译器检查方式（使用内容而不是时间戳）
+export CCACHE_COMPILERCHECK=content
+
+# 设置 ccache 最大缓存大小（工作流中也会设置，这里作为备份）
+ccache -M 10G 2>/dev/null || true
 
 # 克隆指定版本的内核源码
 git clone https://github.com/GengWei1997/linux.git --branch raphael-$1 --depth 1 linux
@@ -25,7 +27,7 @@ wget -O arch/arm64/configs/raphael.config https://raw.githubusercontent.com/Geng
 # 生成内核配置
 make -j$(nproc) ARCH=arm64 LLVM=-21 defconfig raphael.config
 
-# 编译内核
+# 编译内核（LLVM=-21 会自动使用 Clang，ccache 会通过 PATH 自动拦截）
 make -j$(nproc) ARCH=arm64 LLVM=-21 deb-pkg
 
 cd ..

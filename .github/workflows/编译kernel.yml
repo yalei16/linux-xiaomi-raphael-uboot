@@ -47,6 +47,8 @@ jobs:
         run: |
           ccache -M 10G
           ccache -s
+          # 设置 ccache 目录权限，确保 sudo 用户也能访问
+          sudo chown -R root:root ~/.ccache || true
       
       # 缓存 ccache 目录
       - name: 缓存 ccache
@@ -62,13 +64,13 @@ jobs:
       - name: 编译内核
         run: |          
           # 执行内核编译脚本
-          sudo sh raphael-kernel_build.sh ${{ inputs.kernel_version }}
+          sudo -E sh raphael-kernel_build.sh ${{ inputs.kernel_version }}
       
       # 显示 ccache 统计信息
       - name: 显示 ccache 统计
         if: always()
         run: |
-          ccache -s
+          sudo ccache -s
       
       # 获取当前时间戳
       - name: 获取构建时间
