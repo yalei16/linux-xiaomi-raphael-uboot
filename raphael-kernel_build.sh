@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e  # 遇到错误立即退出
 
-export CCACHE_DIR=/home/runner/.ccache
+export CCACHE_DIR=/home/runner/work/linux-xiaomi-raphael-uboot/linux-xiaomi-raphael-uboot/.ccache
 export CCACHE_COMPRESS=1
 export CCACHE_COMPRESSLEVEL=6
 export PATH="/usr/lib/ccache:$PATH"
