@@ -19,7 +19,6 @@ jobs:
     # 设置权限，允许创建 Release
     permissions:
       contents: write   # 允许创建 Release 和上传文件
-      packages: write   # 允许上传包（如果需要）
     
     # 定义环境变量
     env:
@@ -64,11 +63,7 @@ jobs:
         run: |
           echo "timestamp=$(TZ='Asia/Shanghai' date +'%Y-%m-%d %H:%M:%S')" >> $GITHUB_OUTPUT
       
-      # 列出编译产物
-      - name: 列出编译产物
-        run: ls -la *.deb || true
-      
-      # 创建 GitHub Release 并上传编译产物
+      # 创建 GitHub Release 并上传产物
       - name: 创建 Release 并上传产物
         uses: softprops/action-gh-release@v1
         with:
