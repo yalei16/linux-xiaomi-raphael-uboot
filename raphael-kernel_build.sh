@@ -10,7 +10,7 @@ patch linux/scripts/package/builddeb < builddeb.patch
 cd linux
 
 # 下载内核配置文件
-wget -O arch/arm64/configs/raphael.config https://raw.githubusercontent.com/GengWei1997/kernel-deb/refs/heads/main/uboot-raphael.config
+wget -O arch/arm64/configs/raphael.config https://raw.githubusercontent.com/ccmx200/kernel-deb/refs/heads/main/uboot-raphael.config
 
 # 生成内核配置
 make -j$(nproc) ARCH=arm64 LLVM=-21 defconfig raphael.config
