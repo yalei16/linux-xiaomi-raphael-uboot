@@ -84,14 +84,20 @@ jobs:
           echo "=== 挂载镜像 ==="
           sudo mount -o loop "${ROOTFS_IMG}" "${MOUNT_POINT}"
           
-          echo "=== 下载 Kali ARM64 基础系统 ==="
-          # 使用 debootstrap 构建 Kali 基础系统
-          sudo qemu-debootstrap \
+          echo "=== 第一阶段：下载 Kali ARM64 基础系统 (foreign) ==="
+          # 使用 --foreign 参数进行第一阶段
+          sudo debootstrap \
+            --foreign \
             --arch=arm64 \
-            --variant=minbase \
             kali-rolling \
             "${MOUNT_POINT}" \
             http://http.kali.org/kali
+          
+          echo "=== 复制 QEMU 静态二进制文件 ==="
+          sudo cp /usr/bin/qemu-aarch64-static "${MOUNT_POINT}/usr/bin/"
+          
+          echo "=== 第二阶段：完成 debootstrap ==="
+          sudo chroot "${MOUNT_POINT}" /debootstrap/debootstrap --second-stage
           
           echo "=== 配置基础系统 ==="
           # 挂载伪文件系统
@@ -105,15 +111,26 @@ jobs:
           
           echo "=== 配置 Kali 源和基础设置 ==="
           sudo chroot "${MOUNT_POINT}" bash -c '
-            # 配置清华源
+            # 配置官方 Kali 源（使用标准格式）
             cat > /etc/apt/sources.list << EOF
-          deb https://mirrors.tuna.tsinghua.edu.cn/kali kali-rolling main non-free contrib
-          deb-src https://mirrors.tuna.tsinghua.edu.cn/kali kali-rolling main non-free contrib
+          deb http://http.kali.org/kali kali-rolling main contrib non-free non-free-firmware
+          deb-src http://http.kali.org/kali kali-rolling main contrib non-free non-free-firmware
           EOF
           
+            # 更新并安装基础包
             apt update
+          
+            # 先安装关键包
+            apt install -y --no-install-recommends \
+              ca-certificates \
+              gnupg \
+              kali-archive-keyring
+          
+            # 再次更新
+            apt update
+          
+            # 安装基础系统包
             apt install -y \
-              kali-archive-keyring \
               locales \
               tzdata \
               keyboard-configuration \
@@ -148,12 +165,12 @@ jobs:
               tcpdump \
               openssh-client \
               openssh-server \
-              rsync
+              rsync \
+              init-system-helpers
           
             # 设置时区
             ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
             echo "Asia/Shanghai" > /etc/timezone
-            dpkg-reconfigure -f noninteractive tzdata
           
             # 设置 locale
             echo "en_US.UTF-8 UTF-8" > /etc/locale.gen
@@ -161,22 +178,32 @@ jobs:
             locale-gen
             update-locale LANG=en_US.UTF-8
           
+            # 创建必要的组
+            groupadd -f netdev
+            groupadd -f bluetooth
+            groupadd -f sudo
+          
             # 创建用户
-            useradd -m -s /bin/bash -G sudo,audio,video,netdev,dialout,bluetooth user
+            useradd -m -s /bin/bash -G sudo,audio,video,netdev,dialout,bluetooth user || true
             echo "user:1234" | chpasswd
             echo "root:1234" | chpasswd
           
             # 配置 sudo 免密码
+            mkdir -p /etc/sudoers.d
             echo "user ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/user
             chmod 440 /etc/sudoers.d/user
           
             # 允许 root SSH 登录
-            sed -i "s/#PermitRootLogin prohibit-password/PermitRootLogin yes/" /etc/ssh/sshd_config
-            sed -i "s/#PasswordAuthentication yes/PasswordAuthentication yes/" /etc/ssh/sshd_config
+            mkdir -p /etc/ssh
+            touch /etc/ssh/sshd_config
+            sed -i "s/#PermitRootLogin prohibit-password/PermitRootLogin yes/" /etc/ssh/sshd_config 2>/dev/null || echo "PermitRootLogin yes" >> /etc/ssh/sshd_config
+            sed -i "s/#PasswordAuthentication yes/PasswordAuthentication yes/" /etc/ssh/sshd_config 2>/dev/null || echo "PasswordAuthentication yes" >> /etc/ssh/sshd_config
           
             # 使用 update-rc.d 启用 SSH (替代 systemctl)
-            update-rc.d ssh defaults
-            update-rc.d ssh enable
+            if [ -f /etc/init.d/ssh ]; then
+              update-rc.d ssh defaults
+              update-rc.d ssh enable
+            fi
           '
           
           echo "=== 下载并安装小米 Raphael 内核 ==="
@@ -206,8 +233,10 @@ jobs:
               wireless-regdb
           
             # 使用 update-rc.d 启用 NetworkManager (替代 systemctl)
-            update-rc.d network-manager defaults
-            update-rc.d network-manager enable
+            if [ -f /etc/init.d/network-manager ]; then
+              update-rc.d network-manager defaults
+              update-rc.d network-manager enable
+            fi
           
             # 创建 WiFi 修复脚本
             cat > /usr/local/bin/wifi-fix.sh << "WIFIEOF"
@@ -269,8 +298,10 @@ jobs:
               pulseaudio-module-bluetooth
           
             # 使用 update-rc.d 启用蓝牙 (替代 systemctl)
-            update-rc.d bluetooth defaults
-            update-rc.d bluetooth enable
+            if [ -f /etc/init.d/bluetooth ]; then
+              update-rc.d bluetooth defaults
+              update-rc.d bluetooth enable
+            fi
           
             # 创建蓝牙修复脚本
             cat > /usr/local/bin/bluetooth-fix.sh << "BTEOF"
@@ -320,8 +351,10 @@ jobs:
               dnsmasq
           
             # 使用 update-rc.d 启用 dnsmasq (替代 systemctl)
-            update-rc.d dnsmasq defaults
-            update-rc.d dnsmasq enable
+            if [ -f /etc/init.d/dnsmasq ]; then
+              update-rc.d dnsmasq defaults
+              update-rc.d dnsmasq enable
+            fi
           
             # 配置 USB NCM Gadget
             mkdir -p /etc/usbgadget
@@ -434,8 +467,10 @@ jobs:
                   lightdm-gtk-greeter
               
                 # 使用 update-rc.d 启用 lightdm (替代 systemctl)
-                update-rc.d lightdm defaults
-                update-rc.d lightdm enable
+                if [ -f /etc/init.d/lightdm ]; then
+                  update-rc.d lightdm defaults
+                  update-rc.d lightdm enable
+                fi
               '
               ;;
             gnome)
@@ -445,8 +480,10 @@ jobs:
                   gdm3
               
                 # 使用 update-rc.d 启用 gdm3 (替代 systemctl)
-                update-rc.d gdm3 defaults
-                update-rc.d gdm3 enable
+                if [ -f /etc/init.d/gdm3 ]; then
+                  update-rc.d gdm3 defaults
+                  update-rc.d gdm3 enable
+                fi
               '
               ;;
             kde)
@@ -456,8 +493,10 @@ jobs:
                   sddm
               
                 # 使用 update-rc.d 启用 sddm (替代 systemctl)
-                update-rc.d sddm defaults
-                update-rc.d sddm enable
+                if [ -f /etc/init.d/sddm ]; then
+                  update-rc.d sddm defaults
+                  update-rc.d sddm enable
+                fi
               '
               ;;
             lxde)
@@ -467,8 +506,10 @@ jobs:
                   lightdm
               
                 # 使用 update-rc.d 启用 lightdm (替代 systemctl)
-                update-rc.d lightdm defaults
-                update-rc.d lightdm enable
+                if [ -f /etc/init.d/lightdm ]; then
+                  update-rc.d lightdm defaults
+                  update-rc.d lightdm enable
+                fi
               '
               ;;
             none)
@@ -614,10 +655,14 @@ jobs:
               i2c-tools
           
             # 使用 update-rc.d 启用服务 (替代 systemctl)
-            update-rc.d upower defaults
-            update-rc.d upower enable
-            update-rc.d acpid defaults
-            update-rc.d acpid enable
+            if [ -f /etc/init.d/upower ]; then
+              update-rc.d upower defaults
+              update-rc.d upower enable
+            fi
+            if [ -f /etc/init.d/acpid ]; then
+              update-rc.d acpid defaults
+              update-rc.d acpid enable
+            fi
           
             # 配置电池监控
             cat > /etc/acpi/events/battery << ACPI
@@ -883,114 +928,4 @@ jobs:
       - name: 准备上传文件
         run: |
           WORK_DIR="/tmp/kali-rootfs"
-          mkdir -p release-files
-          
-          # 复制构建产物
-          cp "${WORK_DIR}"/kali-raphael-rootfs.img.zst release-files/ 2>/dev/null || true
-          cp "${WORK_DIR}"/kali-raphael-rootfs.tar.gz release-files/ 2>/dev/null || true
-          
-          # 创建刷机说明
-          cat > release-files/刷机说明.txt << 'README'
-          =========================================
-          Kali Linux for 红米 K20 Pro (Raphael)
-          =========================================
-          
-          构建信息:
-          - 桌面环境: ${{ inputs.desktop_environment }}
-          - 包含渗透工具: ${{ inputs.include_tools }}
-          - 镜像大小: ${{ inputs.rootfs_size }}GB
-          
-          已集成功能:
-          ✅ Wi-Fi 2.4/5GHz (ath10k)
-          ✅ 蓝牙 (QCA)
-          ✅ USB-SSH (NCM 172.16.42.1)
-          ✅ GPU (Adreno 640)
-          ✅ 触摸手势 (双击/长按/滑动)
-          ✅ 屏幕键盘自动弹出
-          ✅ 电池/RTC/LED
-          
-          刷机方法1 - Fastboot (推荐):
-          --------------------------------
-          1. 解压 rootfs 镜像:
-             zstd -d kali-raphael-rootfs.img.zst
-          
-          2. 进入 Fastboot 模式:
-             adb reboot bootloader
-          
-          3. 刷入镜像:
-             fastboot flash userdata kali-raphael-rootfs.img
-             fastboot reboot
-          
-          刷机方法2 - TWRP 卡刷:
-          --------------------------------
-          1. 复制 kali-raphael-rootfs.tar.gz 到手机存储
-          
-          2. 进入 TWRP Recovery
-          
-          3. 挂载 /data 分区
-          
-          4. 清除目标分区数据 (如 sda33):
-             dd if=/dev/zero of=/dev/block/sda33 bs=1M count=100
-          
-          5. 格式化为 ext4:
-             mkfs.ext4 /dev/block/sda33
-          
-          6. 挂载分区并解压:
-             mount /dev/block/sda33 /mnt
-             tar xzpf /sdcard/kali-raphael-rootfs.tar.gz -C /mnt
-          
-          7. 重启系统
-          
-          首次启动:
-          --------------------------------
-          - 用户名: user
-          - 密码: 1234
-          - Root 密码: 1234
-          - SSH: 连接 USB 后访问 172.16.42.1
-          
-          修复脚本:
-          - /usr/local/bin/wifi-fix.sh - 修复 WiFi
-          - /usr/local/bin/bluetooth-fix.sh - 修复蓝牙
-          - /usr/local/bin/led-control.sh [on|off] - LED 控制
-          
-          内核来源:
-          https://github.com/yalei16/linux-xiaomi-raphael-uboot
-          README
-          
-          ls -lh release-files/
-
-      - name: 上传到 GitHub Release
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: kali-rootfs-${{ github.run_number }}
-          name: Kali Linux Rootfs for K20 Pro - ${{ inputs.desktop_environment }}
-          body: |
-            ## Kali Linux for 红米 K20 Pro (Raphael)
-            
-            ### 构建配置
-            - **桌面环境**: ${{ inputs.desktop_environment }}
-            - **包含渗透工具**: ${{ inputs.include_tools }}
-            - **镜像大小**: ${{ inputs.rootfs_size }}GB
-            
-            ### ✅ 已集成功能
-            - ✅ Wi-Fi 2.4/5GHz (ath10k + qrtr/pd-mapper/tqftpserv/rmtfs)
-            - ✅ 蓝牙 (QCA hci_qca + hci_uart)
-            - ✅ USB-SSH (NCM 172.16.42.1)
-            - ✅ GPU (Adreno 640 + Mesa Vulkan)
-            - ✅ 触摸手势 (Touchegg: 双击/长按/滑动/缩放)
-            - ✅ 屏幕键盘自动弹出 (Onboard/Xvkbd)
-            - ✅ 电池/RTC/LED 支持
-            - ✅ 渗透测试工具集 (Kali Linux 全套工具)
-            
-            ### 刷机方法
-            1. **Fastboot**: `fastboot flash userdata kali-raphael-rootfs.img`
-            2. **TWRP**: 解压 tar.gz 到目标分区
-            
-            ### 登录信息
-            - 用户名: `user` / 密码: `1234`
-            - Root: `root` / 密码: `1234`
-            - SSH: USB 连接后 `ssh user@172.16.42.1`
-          files: |
-            release-files/*
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+         
