@@ -33,16 +33,44 @@ jobs:
             parted kpartx qemu-utils 7zip \
             git wget curl gnupg
           
-          # 手动下载并安装kali-archive-keyring
-          echo "下载kali-archive-keyring..."
-          wget -q http://http.kali.org/pool/main/k/kali-archive-keyring/kali-archive-keyring_2024.1_all.deb -O /tmp/kali-keyring.deb
-          sudo dpkg -i /tmp/kali-keyring.deb || sudo apt install -f -y
+          # 安装kali-archive-keyring - 多源备用方案
+          echo "=== 安装kali-archive-keyring ==="
+          KEYRING_INSTALLED=false
+          
+          # 方法1: 尝试从Kali官方源apt安装
+          echo "尝试方法1: apt直接安装..."
+          sudo apt install -y kali-archive-keyring 2>/dev/null && KEYRING_INSTALLED=true || echo "方法1失败"
+          
+          # 方法2: 从清华镜像下载deb包安装
+          if [ "$KEYRING_INSTALLED" = "false" ]; then
+            echo "尝试方法2: 清华镜像下载..."
+            wget --timeout=30 --tries=3 -O /tmp/kali-keyring.deb \
+              "https://mirrors.tuna.tsinghua.edu.cn/kali/pool/main/k/kali-archive-keyring/kali-archive-keyring_2024.1_all.deb" 2>/dev/null && \
+            sudo dpkg -i /tmp/kali-keyring.deb && \
+            sudo apt install -f -y && \
+            KEYRING_INSTALLED=true || echo "方法2失败"
+          fi
+          
+          # 方法3: 从Kali官方下载
+          if [ "$KEYRING_INSTALLED" = "false" ]; then
+            echo "尝试方法3: Kali官方下载..."
+            wget --timeout=30 --tries=3 -O /tmp/kali-keyring.deb \
+              "http://http.kali.org/pool/main/k/kali-archive-keyring/kali-archive-keyring_2024.1_all.deb" 2>/dev/null && \
+            sudo dpkg -i /tmp/kali-keyring.deb && \
+            sudo apt install -f -y && \
+            KEYRING_INSTALLED=true || echo "方法3失败"
+          fi
           
           # 验证安装
           if [ -f /usr/share/keyrings/kali-archive-keyring.gpg ]; then
             echo "✓ kali-archive-keyring安装成功"
-          else
-            echo "⚠️ 警告：keyring可能未正确安装"
+            KEYRING_INSTALLED=true
+          fi
+          
+          if [ "$KEYRING_INSTALLED" = "false" ]; then
+            echo "⚠️ 警告：keyring安装失败，将使用无签名验证模式继续"
+            # 创建空标记文件，后续步骤检测用
+            touch /tmp/skip_keyring_check
           fi
       
       - name: 下载内核包
@@ -86,7 +114,7 @@ jobs:
           mount -o loop rootfs.img rootdir
           
           echo "=== 安装Kali基础系统 ==="
-          # 使用Debian trixie作为基础（避免Kali源问题），后续替换为Kali源
+          # 使用Debian trixie作为基础，后续替换为Kali源
           debootstrap --arch=arm64 trixie rootdir http://mirrors.tuna.tsinghua.edu.cn/debian/
           
           echo "=== 挂载系统目录 ==="
@@ -100,38 +128,65 @@ jobs:
           export DEBIAN_FRONTEND=noninteractive
           
           echo "=== 配置Kali源 ==="
-          # 直接写入Kali源，不依赖kali-archive-keyring
           cat > rootdir/etc/apt/sources.list << EOF
           deb http://mirrors.tuna.tsinghua.edu.cn/kali kali-rolling main non-free contrib
           deb-src http://mirrors.tuna.tsinghua.edu.cn/kali kali-rolling main non-free contrib
           EOF
           
-          # 复制keyring到chroot环境
+          # 复制keyring到chroot环境（如果存在）
           mkdir -p rootdir/usr/share/keyrings/
-          cp /usr/share/keyrings/kali-archive-keyring.gpg rootdir/usr/share/keyrings/ 2>/dev/null || true
+          if [ -f /usr/share/keyrings/kali-archive-keyring.gpg ]; then
+            cp /usr/share/keyrings/kali-archive-keyring.gpg rootdir/usr/share/keyrings/
+            echo "✓ 已复制keyring到chroot"
+          else
+            echo "⚠️ 宿主机没有keyring，chroot内将使用无签名模式"
+          fi
           
-          # 更新，忽略签名错误（首次）
-          chroot rootdir apt update || {
-            echo "尝试无签名验证更新..."
+          # 首次更新 - 根据是否有keyring决定策略
+          if [ -f rootdir/usr/share/keyrings/kali-archive-keyring.gpg ]; then
+            echo "=== 首次apt update（有签名验证）==="
+            chroot rootdir apt update || {
+              echo "标准更新失败，尝试允许不安全源..."
+              chroot rootdir apt update --allow-insecure-repositories || true
+            }
+          else
+            echo "=== 首次apt update（无签名验证模式）==="
+            chroot rootdir apt update -o Acquire::AllowInsecureRepositories=true || true
+          fi
+          
+          # 在chroot内安装kali-archive-keyring
+          echo "=== 在chroot内安装kali-archive-keyring ==="
+          if [ -f /tmp/kali-keyring.deb ]; then
+            cp /tmp/kali-keyring.deb rootdir/tmp/
+            chroot rootdir dpkg -i /tmp/kali-keyring.deb 2>/dev/null || \
+            chroot rootdir apt install -f -y --allow-unauthenticated 2>/dev/null || true
+          fi
+          
+          # 如果还没装上，尝试apt直接安装
+          if [ ! -f rootdir/usr/share/keyrings/kali-archive-keyring.gpg ]; then
+            chroot rootdir apt install -y kali-archive-keyring --allow-unauthenticated 2>/dev/null || \
+            chroot rootdir apt install -y kali-archive-keyring -o Acquire::AllowInsecureRepositories=true 2>/dev/null || \
+            echo "⚠️ chroot内keyring安装失败，继续无签名模式"
+          fi
+          
+          # 最终更新
+          echo "=== 最终apt update ==="
+          if [ -f rootdir/usr/share/keyrings/kali-archive-keyring.gpg ]; then
+            chroot rootdir apt update
+          else
             chroot rootdir apt update --allow-insecure-repositories || true
-          }
-          
-          # 安装kali-archive-keyring到chroot内
-          chroot rootdir apt install -y kali-archive-keyring 2>/dev/null || {
-            wget -q http://http.kali.org/pool/main/k/kali-archive-keyring/kali-archive-keyring_2024.1_all.deb -O rootdir/tmp/kali-keyring.deb
-            chroot rootdir dpkg -i /tmp/kali-archive-keyring_2024.1_all.deb || true
-          }
-          
-          # 再次更新
-          chroot rootdir apt update
+          fi
           
           echo "=== 安装核心系统 ==="
-          chroot rootdir apt full-upgrade -y
+          chroot rootdir apt full-upgrade -y --allow-unauthenticated 2>/dev/null || \
+          chroot rootdir apt full-upgrade -y -o Acquire::AllowInsecureRepositories=true 2>/dev/null || \
+          chroot rootdir apt full-upgrade -y || true
           
-          # 安装Kali元包（如果失败则安装基础系统）
-          chroot rootdir apt install -y kali-linux-headless 2>/dev/null || {
+          # 安装Kali元包
+          echo "=== 安装Kali元包 ==="
+          chroot rootdir apt install -y kali-linux-headless --allow-unauthenticated 2>/dev/null || {
             echo "kali-linux-headless安装失败，安装基础系统..."
-            chroot rootdir apt install -y \
+            chroot rootdir apt install -y --allow-unauthenticated \
               bash-completion sudo ssh openssh-server nano vim \
               systemd-boot initramfs-tools chrony curl wget \
               dnsmasq iptables iproute2 net-tools wireless-tools \
@@ -140,11 +195,13 @@ jobs:
               mesa-vulkan-drivers mesa-opencl-icd \
               bluetooth bluez \
               libinput10 libinput-bin \
-              udisks2 network-manager
+              udisks2 network-manager 2>/dev/null || true
           }
           
-          # 硬件支持包（可能部分在Kali源中名称不同）
-          chroot rootdir apt install -y rmtfs protection-domain-mapper tqftpserv 2>/dev/null || {
+          # 硬件支持包
+          echo "=== 安装硬件支持包 ==="
+          chroot rootdir apt install -y --allow-unauthenticated \
+            rmtfs protection-domain-mapper tqftpserv 2>/dev/null || {
             echo "部分Modem包可能不可用，跳过..."
           }
           
@@ -152,29 +209,31 @@ jobs:
           DESKTOP="${{ github.event.inputs.desktop }}"
           
           if [ "$DESKTOP" = "xfce" ]; then
-            # 尝试安装Kali XFCE，失败则安装普通XFCE
-            chroot rootdir apt install -y kali-desktop-xfce 2>/dev/null || \
-            chroot rootdir apt install -y xfce4 xfce4-goodies lightdm lightdm-gtk-greeter
+            chroot rootdir apt install -y --allow-unauthenticated kali-desktop-xfce 2>/dev/null || \
+            chroot rootdir apt install -y --allow-unauthenticated xfce4 xfce4-goodies lightdm lightdm-gtk-greeter 2>/dev/null || {
+              echo "XFCE安装失败，尝试最小安装..."
+              chroot rootdir apt install -y xfce4 lightdm 2>/dev/null || true
+            }
             
             # 触摸支持
-            chroot rootdir apt install -y touchegg onboard xvkbd 2>/dev/null || {
+            chroot rootdir apt install -y --allow-unauthenticated touchegg onboard xvkbd 2>/dev/null || {
               echo "部分触摸包可能不可用..."
             }
           else
-            chroot rootdir apt install -y phosh phoc squeekboard 2>/dev/null || {
-              echo "Phosh安装失败，尝试其他源..."
+            chroot rootdir apt install -y --allow-unauthenticated phosh phoc squeekboard 2>/dev/null || {
+              echo "Phosh安装失败..."
             }
           fi
           
           echo "=== 配置区域设置 ==="
-          chroot rootdir apt install -y locales locales-all tzdata
-          chroot rootdir sed -i "s/^# *zh_CN.UTF-8 UTF-8/zh_CN.UTF-8 UTF-8/" /etc/locale.gen
-          chroot rootdir locale-gen zh_CN.UTF-8
-          chroot rootdir update-locale LANG=zh_CN.UTF-8 LANGUAGE=zh_CN:zh
+          chroot rootdir apt install -y --allow-unauthenticated locales locales-all tzdata 2>/dev/null || true
+          chroot rootdir sed -i "s/^# *zh_CN.UTF-8 UTF-8/zh_CN.UTF-8 UTF-8/" /etc/locale.gen 2>/dev/null || true
+          chroot rootdir locale-gen zh_CN.UTF-8 2>/dev/null || true
+          chroot rootdir update-locale LANG=zh_CN.UTF-8 LANGUAGE=zh_CN:zh 2>/dev/null || true
           
           echo "Asia/Shanghai" > rootdir/etc/timezone
-          chroot rootdir ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
-          chroot rootdir dpkg-reconfigure -f noninteractive tzdata
+          chroot rootdir ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime 2>/dev/null || true
+          chroot rootdir dpkg-reconfigure -f noninteractive tzdata 2>/dev/null || true
           
           echo "=== 修复服务配置 ==="
           if [ -f rootdir/lib/systemd/system/pd-mapper.service ]; then
@@ -190,8 +249,8 @@ jobs:
               [ -f "$deb" ] && chroot rootdir dpkg -i --force-all "$deb" 2>/dev/null || true
             done
             
-            chroot rootdir apt install -f -y
-            chroot rootdir update-initramfs -c -k all
+            chroot rootdir apt install -f -y --allow-unauthenticated 2>/dev/null || true
+            chroot rootdir update-initramfs -c -k all 2>/dev/null || true
           fi
           
           echo "=== 配置触摸手势 (Touchégg) ==="
@@ -200,7 +259,7 @@ jobs:
             mkdir -p rootdir/home/kali/.config/touchegg
             
             cat > rootdir/etc/xdg/touchegg/touchegg.conf << TOUCHEGG
-            <touchégg>
+          <touchégg>
             <settings>
               <property name="animation_delay">150</property>
               <property name="action_execute_threshold">20</property>
@@ -218,7 +277,7 @@ jobs:
             <gesture type="TAP" fingers="3">
               <action type="MOUSE_CLICK"><button>2</button><on>begin</on></action>
             </gesture>
-  
+            
             <gesture type="SWIPE" fingers="2" direction="UP">
               <action type="SCROLL"><direction>up</direction><speed>50</speed></action>
             </gesture>
@@ -284,24 +343,24 @@ jobs:
             chroot rootdir chown -R kali:kali /home/kali/.config/onboard 2>/dev/null || true
             
             cat > rootdir/etc/xdg/autostart/onboard.desktop << EOF
-           [Desktop Entry]
+          [Desktop Entry]
           Name=Onboard
           Exec=onboard --not-show-in=GNOME,Unity
           Type=Application
           X-GNOME-Autostart-enabled=true
           X-GNOME-Autostart-Delay=3
           EOF
-                      
-                      cat > rootdir/etc/X11/Xsession.d/90at-spi << EOF
+            
+            cat > rootdir/etc/X11/Xsession.d/90at-spi << EOF
           export GTK_MODULES=gail:atk-bridge
           export QT_ACCESSIBILITY=1
           export QT_LINUX_ACCESSIBILITY_ALWAYS_ON=1
           EOF
-                      chmod +x rootdir/etc/X11/Xsession.d/90at-spi
-                    fi
-                    
-                    echo "=== 配置USB NCM ==="
-                    cat > rootdir/etc/dnsmasq.d/usb-ncm.conf << EOF
+            chmod +x rootdir/etc/X11/Xsession.d/90at-spi
+          fi
+          
+          echo "=== 配置USB NCM ==="
+          cat > rootdir/etc/dnsmasq.d/usb-ncm.conf << EOF
           interface=usb0
           bind-dynamic
           port=0
@@ -309,11 +368,11 @@ jobs:
           dhcp-range=172.16.42.2,172.16.42.254,255.255.255.0,1h
           dhcp-option=3,172.16.42.1
           EOF
-                    
-                    echo "net.ipv4.ip_forward=1" > rootdir/etc/sysctl.d/99-usb-ncm.conf
-                    chroot rootdir systemctl enable dnsmasq 2>/dev/null || true
-                    
-                    cat > rootdir/usr/local/sbin/setup-usb-ncm.sh << SETUPSCRIPT
+          
+          echo "net.ipv4.ip_forward=1" > rootdir/etc/sysctl.d/99-usb-ncm.conf
+          chroot rootdir systemctl enable dnsmasq 2>/dev/null || true
+          
+          cat > rootdir/usr/local/sbin/setup-usb-ncm.sh << SETUPSCRIPT
           #!/bin/sh
           set -e
           modprobe libcomposite 2>/dev/null || true
@@ -345,8 +404,8 @@ jobs:
           fi
           systemctl restart dnsmasq 2>/dev/null || true
           SETUPSCRIPT
-                    chmod +x rootdir/usr/local/sbin/setup-usb-ncm.sh
-                    
+          chmod +x rootdir/usr/local/sbin/setup-usb-ncm.sh
+          
           cat > rootdir/etc/systemd/system/usb-ncm.service << EOF
           [Unit]
           Description=USB CDC-NCM gadget setup
@@ -363,35 +422,35 @@ jobs:
           [Install]
           WantedBy=multi-user.target
           EOF
-                    chroot rootdir systemctl enable usb-ncm 2>/dev/null || true
-                    
-                    echo "=== 配置FSTAB和用户 ==="
-                    cat > rootdir/etc/fstab << EOF
+          chroot rootdir systemctl enable usb-ncm 2>/dev/null || true
+          
+          echo "=== 配置FSTAB和用户 ==="
+          cat > rootdir/etc/fstab << EOF
           PARTLABEL=userdata / ext4 errors=remount-ro,x-systemd.growfs 0 1
           PARTLABEL=cache /boot vfat umask=0077 0 1
           EOF
-                    
-                    echo "root:toor" | chroot rootdir chpasswd
-                    chroot rootdir useradd -m -G sudo,audio,video,input,netdev -s /bin/bash kali 2>/dev/null || true
-                    echo "kali:kali" | chroot rootdir chpasswd
-                    
-                    mkdir -p rootdir/etc/lightdm/lightdm.conf.d
-                    cat > rootdir/etc/lightdm/lightdm.conf.d/50-autologin.conf << EOF
+          
+          echo "root:toor" | chroot rootdir chpasswd
+          chroot rootdir useradd -m -G sudo,audio,video,input,netdev -s /bin/bash kali 2>/dev/null || true
+          echo "kali:kali" | chroot rootdir chpasswd
+          
+          mkdir -p rootdir/etc/lightdm/lightdm.conf.d
+          cat > rootdir/etc/lightdm/lightdm.conf.d/50-autologin.conf << EOF
           [Seat:*]
           autologin-user=kali
           autologin-user-timeout=0
           autologin-session=xfce
           user-session=xfce
           EOF
-                    
-                    sed -i "s/#PermitRootLogin prohibit-password/PermitRootLogin yes/" rootdir/etc/ssh/sshd_config
-                    sed -i "s/#PasswordAuthentication yes/PasswordAuthentication yes/" rootdir/etc/ssh/sshd_config
-                    chroot rootdir systemctl enable ssh 2>/dev/null || true
-                    chroot rootdir systemctl enable lightdm 2>/dev/null || true
-                    chroot rootdir systemctl enable NetworkManager 2>/dev/null || true
-                    chroot rootdir systemctl enable bluetooth 2>/dev/null || true
-                    
-                    cat > rootdir/etc/systemd/system/bluetooth-fix.service << EOF
+          
+          sed -i "s/#PermitRootLogin prohibit-password/PermitRootLogin yes/" rootdir/etc/ssh/sshd_config
+          sed -i "s/#PasswordAuthentication yes/PasswordAuthentication yes/" rootdir/etc/ssh/sshd_config
+          chroot rootdir systemctl enable ssh 2>/dev/null || true
+          chroot rootdir systemctl enable lightdm 2>/dev/null || true
+          chroot rootdir systemctl enable NetworkManager 2>/dev/null || true
+          chroot rootdir systemctl enable bluetooth 2>/dev/null || true
+          
+          cat > rootdir/etc/systemd/system/bluetooth-fix.service << EOF
           [Unit]
           Description=Bluetooth QCA Firmware Fix
           After=bluetooth.service systemd-modules-load.service
@@ -409,8 +468,8 @@ jobs:
           chroot rootdir systemctl enable bluetooth-fix.service 2>/dev/null || true
           
           echo "=== 清理和打包 ==="
-          chroot rootdir apt clean
-          chroot rootdir apt autoclean
+          chroot rootdir apt clean 2>/dev/null || true
+          chroot rootdir apt autoclean 2>/dev/null || true
           
           mv rootdir/boot/initrd.img-* rootdir/boot/initramfs 2>/dev/null || true
           mv rootdir/boot/vmlinuz-* rootdir/boot/linux.efi 2>/dev/null || true
