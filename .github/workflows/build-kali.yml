@@ -173,7 +173,10 @@ jobs:
             # 允许 root SSH 登录
             sed -i "s/#PermitRootLogin prohibit-password/PermitRootLogin yes/" /etc/ssh/sshd_config
             sed -i "s/#PasswordAuthentication yes/PasswordAuthentication yes/" /etc/ssh/sshd_config
-            systemctl enable ssh
+          
+            # 使用 update-rc.d 启用 SSH (替代 systemctl)
+            update-rc.d ssh defaults
+            update-rc.d ssh enable
           '
           
           echo "=== 下载并安装小米 Raphael 内核 ==="
@@ -202,8 +205,9 @@ jobs:
               crda \
               wireless-regdb
           
-            # 配置 WiFi 服务
-            systemctl enable NetworkManager
+            # 使用 update-rc.d 启用 NetworkManager (替代 systemctl)
+            update-rc.d network-manager defaults
+            update-rc.d network-manager enable
           
             # 创建 WiFi 修复脚本
             cat > /usr/local/bin/wifi-fix.sh << "WIFIEOF"
@@ -215,26 +219,26 @@ jobs:
           modprobe qrtr-smd || true
           
           # 启动 pd-mapper
-          systemctl start pd-mapper || true
+          service pd-mapper start || true
           
           # 启动 tqftpserv
-          systemctl start tqftpserv || true
+          service tqftpserv start || true
           
           # 启动 rmtfs
-          systemctl start rmtfs || true
+          service rmtfs start || true
           
           # 加载 ath10k 驱动
           modprobe ath10k_snoc || true
           modprobe ath10k_core || true
           
           # 重启 NetworkManager
-          systemctl restart NetworkManager
+          service network-manager restart
           
           echo "WiFi 修复完成"
           WIFIEOF
             chmod +x /usr/local/bin/wifi-fix.sh
           
-            # 创建 systemd 服务
+            # 创建 systemd 服务文件 (用于真实系统启动后)
             cat > /etc/systemd/system/wifi-fix.service << "SVCEOF"
           [Unit]
           Description=WiFi Fix for Xiaomi Raphael
@@ -250,7 +254,9 @@ jobs:
           WantedBy=multi-user.target
           SVCEOF
           
-            systemctl enable wifi-fix.service
+            # 创建符号链接启用服务 (替代 systemctl enable)
+            mkdir -p /etc/systemd/system/multi-user.target.wants
+            ln -sf /etc/systemd/system/wifi-fix.service /etc/systemd/system/multi-user.target.wants/wifi-fix.service
           '
           
           echo "=== 配置蓝牙 (QCA) ==="
@@ -262,8 +268,9 @@ jobs:
               blueman \
               pulseaudio-module-bluetooth
           
-            # 启用蓝牙服务
-            systemctl enable bluetooth
+            # 使用 update-rc.d 启用蓝牙 (替代 systemctl)
+            update-rc.d bluetooth defaults
+            update-rc.d bluetooth enable
           
             # 创建蓝牙修复脚本
             cat > /usr/local/bin/bluetooth-fix.sh << "BTEOF"
@@ -276,7 +283,7 @@ jobs:
           modprobe btbcm || true
           
           # 启动蓝牙服务
-          systemctl start bluetooth
+          service bluetooth start
           
           # 配置蓝牙
           hciattach /dev/ttyHS0 qca 115200 flow || true
@@ -285,7 +292,7 @@ jobs:
           BTEOF
             chmod +x /usr/local/bin/bluetooth-fix.sh
           
-            # 创建蓝牙服务
+            # 创建蓝牙服务文件
             cat > /etc/systemd/system/bluetooth-fix.service << "BTSVCEOF"
           [Unit]
           Description=Bluetooth Fix for Xiaomi Raphael
@@ -301,7 +308,8 @@ jobs:
           WantedBy=multi-user.target
           BTSVCEOF
           
-            systemctl enable bluetooth-fix.service
+            # 创建符号链接启用服务 (替代 systemctl enable)
+            ln -sf /etc/systemd/system/bluetooth-fix.service /etc/systemd/system/multi-user.target.wants/bluetooth-fix.service
           '
           
           echo "=== 配置 USB-SSH (NCM) ==="
@@ -310,6 +318,10 @@ jobs:
               usb-gadget \
               libusbgx0 \
               dnsmasq
+          
+            # 使用 update-rc.d 启用 dnsmasq (替代 systemctl)
+            update-rc.d dnsmasq defaults
+            update-rc.d dnsmasq enable
           
             # 配置 USB NCM Gadget
             mkdir -p /etc/usbgadget
@@ -369,11 +381,11 @@ jobs:
           dhcp-option=6,8.8.8.8,114.114.114.114
           DNSMASQ
           
-          systemctl restart dnsmasq
+          service dnsmasq restart
           USBEEOF
             chmod +x /etc/usbgadget/setup.sh
           
-            # 创建 systemd 服务
+            # 创建 systemd 服务文件
             cat > /etc/systemd/system/usb-ncm-ssh.service << "NCMSVCEOF"
           [Unit]
           Description=USB NCM SSH Gadget
@@ -388,7 +400,8 @@ jobs:
           WantedBy=multi-user.target
           NCMSVCEOF
           
-            systemctl enable usb-ncm-ssh.service
+            # 创建符号链接启用服务 (替代 systemctl enable)
+            ln -sf /etc/systemd/system/usb-ncm-ssh.service /etc/systemd/system/multi-user.target.wants/usb-ncm-ssh.service
           '
           
           echo "=== 配置 GPU (Adreno 640) ==="
@@ -420,7 +433,9 @@ jobs:
                   lightdm \
                   lightdm-gtk-greeter
               
-                systemctl enable lightdm
+                # 使用 update-rc.d 启用 lightdm (替代 systemctl)
+                update-rc.d lightdm defaults
+                update-rc.d lightdm enable
               '
               ;;
             gnome)
@@ -429,7 +444,9 @@ jobs:
                   kali-desktop-gnome \
                   gdm3
               
-                systemctl enable gdm3
+                # 使用 update-rc.d 启用 gdm3 (替代 systemctl)
+                update-rc.d gdm3 defaults
+                update-rc.d gdm3 enable
               '
               ;;
             kde)
@@ -438,7 +455,9 @@ jobs:
                   kali-desktop-kde \
                   sddm
               
-                systemctl enable sddm
+                # 使用 update-rc.d 启用 sddm (替代 systemctl)
+                update-rc.d sddm defaults
+                update-rc.d sddm enable
               '
               ;;
             lxde)
@@ -447,7 +466,9 @@ jobs:
                   kali-desktop-lxde \
                   lightdm
               
-                systemctl enable lightdm
+                # 使用 update-rc.d 启用 lightdm (替代 systemctl)
+                update-rc.d lightdm defaults
+                update-rc.d lightdm enable
               '
               ;;
             none)
@@ -510,7 +531,7 @@ jobs:
           </touchégg>
           TOUCHEGG
           
-            # 创建 systemd 服务
+            # 创建 systemd 服务文件
             cat > /etc/systemd/system/touchegg.service << "TOUCHSVCEOF"
           [Unit]
           Description=Touchegg Daemon
@@ -528,7 +549,9 @@ jobs:
           WantedBy=graphical.target
           TOUCHSVCEOF
           
-            systemctl enable touchegg.service
+            # 创建符号链接启用服务 (替代 systemctl enable)
+            mkdir -p /etc/systemd/system/graphical.target.wants
+            ln -sf /etc/systemd/system/touchegg.service /etc/systemd/system/graphical.target.wants/touchegg.service
           
             # 配置 X11 触摸
             mkdir -p /etc/X11/xorg.conf.d
@@ -590,9 +613,11 @@ jobs:
               acpid \
               i2c-tools
           
-            # 启用电源管理服务
-            systemctl enable upower
-            systemctl enable acpid
+            # 使用 update-rc.d 启用服务 (替代 systemctl)
+            update-rc.d upower defaults
+            update-rc.d upower enable
+            update-rc.d acpid defaults
+            update-rc.d acpid enable
           
             # 配置电池监控
             cat > /etc/acpi/events/battery << ACPI
@@ -792,8 +817,7 @@ jobs:
           resize2fs /dev/sda33
           
           # 禁用自身
-          systemctl disable firstboot
-          rm -f /etc/systemd/system/firstboot.service
+          rm -f /etc/systemd/system/multi-user.target.wants/firstboot.service
           rm -f /usr/local/bin/firstboot.sh
           FIRSTBOOT
             chmod +x /usr/local/bin/firstboot.sh
@@ -812,7 +836,8 @@ jobs:
           WantedBy=multi-user.target
           FBUNIT
           
-            systemctl enable firstboot
+            # 创建符号链接启用 firstboot 服务 (替代 systemctl enable)
+            ln -sf /etc/systemd/system/firstboot.service /etc/systemd/system/multi-user.target.wants/firstboot.service
           '
           
           echo "=== 卸载和打包 ==="
