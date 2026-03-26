@@ -102,9 +102,9 @@ jobs:
           echo "=== 配置Kali源 ==="
           # 直接写入Kali源，不依赖kali-archive-keyring
           cat > rootdir/etc/apt/sources.list << EOF
-deb http://mirrors.tuna.tsinghua.edu.cn/kali kali-rolling main non-free contrib
-deb-src http://mirrors.tuna.tsinghua.edu.cn/kali kali-rolling main non-free contrib
-EOF
+          deb http://mirrors.tuna.tsinghua.edu.cn/kali kali-rolling main non-free contrib
+          deb-src http://mirrors.tuna.tsinghua.edu.cn/kali kali-rolling main non-free contrib
+          EOF
           
           # 复制keyring到chroot环境
           mkdir -p rootdir/usr/share/keyrings/
@@ -200,55 +200,55 @@ EOF
             mkdir -p rootdir/home/kali/.config/touchegg
             
             cat > rootdir/etc/xdg/touchegg/touchegg.conf << TOUCHEGG
-<touchégg>
-  <settings>
-    <property name="animation_delay">150</property>
-    <property name="action_execute_threshold">20</property>
-    <property name="compose_key_event">true</property>
-  </settings>
+            <touchégg>
+            <settings>
+              <property name="animation_delay">150</property>
+              <property name="action_execute_threshold">20</property>
+              <property name="compose_key_event">true</property>
+            </settings>
+            
+            <gesture type="TAP" fingers="1">
+              <action type="MOUSE_CLICK"><button>1</button><on>begin</on></action>
+            </gesture>
+            
+            <gesture type="TAP" fingers="2">
+              <action type="MOUSE_CLICK"><button>3</button><on>begin</on></action>
+            </gesture>
+            
+            <gesture type="TAP" fingers="3">
+              <action type="MOUSE_CLICK"><button>2</button><on>begin</on></action>
+            </gesture>
   
-  <gesture type="TAP" fingers="1">
-    <action type="MOUSE_CLICK"><button>1</button><on>begin</on></action>
-  </gesture>
-  
-  <gesture type="TAP" fingers="2">
-    <action type="MOUSE_CLICK"><button>3</button><on>begin</on></action>
-  </gesture>
-  
-  <gesture type="TAP" fingers="3">
-    <action type="MOUSE_CLICK"><button>2</button><on>begin</on></action>
-  </gesture>
-  
-  <gesture type="SWIPE" fingers="2" direction="UP">
-    <action type="SCROLL"><direction>up</direction><speed>50</speed></action>
-  </gesture>
-  
-  <gesture type="SWIPE" fingers="2" direction="DOWN">
-    <action type="SCROLL"><direction>down</direction><speed>50</speed></action>
-  </gesture>
-  
-  <gesture type="SWIPE" fingers="3" direction="LEFT">
-    <action type="CHANGE_DESKTOP"><direction>next</direction><animate>true</animate></action>
-  </gesture>
-  
-  <gesture type="SWIPE" fingers="3" direction="RIGHT">
-    <action type="CHANGE_DESKTOP"><direction>prev</direction><animate>true</animate></action>
-  </gesture>
-  
-  <gesture type="SWIPE" fingers="4" direction="UP">
-    <action type="SHOW_DESKTOP"><animate>true</animate></action>
-  </gesture>
-</touchégg>
-TOUCHEGG
+            <gesture type="SWIPE" fingers="2" direction="UP">
+              <action type="SCROLL"><direction>up</direction><speed>50</speed></action>
+            </gesture>
+            
+            <gesture type="SWIPE" fingers="2" direction="DOWN">
+              <action type="SCROLL"><direction>down</direction><speed>50</speed></action>
+            </gesture>
+            
+            <gesture type="SWIPE" fingers="3" direction="LEFT">
+              <action type="CHANGE_DESKTOP"><direction>next</direction><animate>true</animate></action>
+            </gesture>
+            
+            <gesture type="SWIPE" fingers="3" direction="RIGHT">
+              <action type="CHANGE_DESKTOP"><direction>prev</direction><animate>true</animate></action>
+            </gesture>
+            
+            <gesture type="SWIPE" fingers="4" direction="UP">
+              <action type="SHOW_DESKTOP"><animate>true</animate></action>
+            </gesture>
+          </touchégg>
+          TOUCHEGG
             
             cat > rootdir/etc/xdg/autostart/touchegg.desktop << EOF
-[Desktop Entry]
-Name=Touchégg
-Exec=touchegg
-Type=Application
-X-GNOME-Autostart-enabled=true
-X-GNOME-Autostart-Delay=2
-EOF
+          [Desktop Entry]
+          Name=Touchégg
+          Exec=touchegg
+          Type=Application
+          X-GNOME-Autostart-enabled=true
+          X-GNOME-Autostart-Delay=2
+          EOF
             
             chroot rootdir cp /etc/xdg/touchegg/touchegg.conf /home/kali/.config/touchegg/ 2>/dev/null || true
             chroot rootdir chown -R kali:kali /home/kali/.config 2>/dev/null || true
@@ -259,153 +259,153 @@ EOF
             mkdir -p rootdir/home/kali/.config/onboard
             
             cat > rootdir/home/kali/.config/onboard/onboard.conf << ONBOARD
-[Main]
-show-status-icon=true
-auto-show=true
-auto-show-focus=true
-auto-show-text=true
-show-on-focus=true
-hide-on-focus-out=true
-
-[Window]
-window-state=docked
-dock-expand=true
-force-to-top=true
-
-[Theme]
-theme=/usr/share/onboard/themes/Nightshade.theme
-
-[Typing Assistance]
-auto-capitalization=true
-auto-punctuation=true
-auto-correction=true
-ONBOARD
+          [Main]
+          show-status-icon=true
+          auto-show=true
+          auto-show-focus=true
+          auto-show-text=true
+          show-on-focus=true
+          hide-on-focus-out=true
+          
+          [Window]
+          window-state=docked
+          dock-expand=true
+          force-to-top=true
+          
+          [Theme]
+          theme=/usr/share/onboard/themes/Nightshade.theme
+          
+          [Typing Assistance]
+          auto-capitalization=true
+          auto-punctuation=true
+          auto-correction=true
+          ONBOARD
             
             chroot rootdir chown -R kali:kali /home/kali/.config/onboard 2>/dev/null || true
             
             cat > rootdir/etc/xdg/autostart/onboard.desktop << EOF
-[Desktop Entry]
-Name=Onboard
-Exec=onboard --not-show-in=GNOME,Unity
-Type=Application
-X-GNOME-Autostart-enabled=true
-X-GNOME-Autostart-Delay=3
-EOF
-            
-            cat > rootdir/etc/X11/Xsession.d/90at-spi << EOF
-export GTK_MODULES=gail:atk-bridge
-export QT_ACCESSIBILITY=1
-export QT_LINUX_ACCESSIBILITY_ALWAYS_ON=1
-EOF
-            chmod +x rootdir/etc/X11/Xsession.d/90at-spi
+           [Desktop Entry]
+          Name=Onboard
+          Exec=onboard --not-show-in=GNOME,Unity
+          Type=Application
+          X-GNOME-Autostart-enabled=true
+          X-GNOME-Autostart-Delay=3
+          EOF
+                      
+                      cat > rootdir/etc/X11/Xsession.d/90at-spi << EOF
+          export GTK_MODULES=gail:atk-bridge
+          export QT_ACCESSIBILITY=1
+          export QT_LINUX_ACCESSIBILITY_ALWAYS_ON=1
+          EOF
+                      chmod +x rootdir/etc/X11/Xsession.d/90at-spi
+                    fi
+                    
+                    echo "=== 配置USB NCM ==="
+                    cat > rootdir/etc/dnsmasq.d/usb-ncm.conf << EOF
+          interface=usb0
+          bind-dynamic
+          port=0
+          dhcp-authoritative
+          dhcp-range=172.16.42.2,172.16.42.254,255.255.255.0,1h
+          dhcp-option=3,172.16.42.1
+          EOF
+                    
+                    echo "net.ipv4.ip_forward=1" > rootdir/etc/sysctl.d/99-usb-ncm.conf
+                    chroot rootdir systemctl enable dnsmasq 2>/dev/null || true
+                    
+                    cat > rootdir/usr/local/sbin/setup-usb-ncm.sh << SETUPSCRIPT
+          #!/bin/sh
+          set -e
+          modprobe libcomposite 2>/dev/null || true
+          mountpoint -q /sys/kernel/config || mount -t configfs none /sys/kernel/config 2>/dev/null || true
+          G=/sys/kernel/config/usb_gadget/g1
+          mkdir -p \\$G
+          echo 0x1d6b > \\$G/idVendor
+          echo 0x0104 > \\$G/idProduct
+          echo 0x0200 > \\$G/bcdUSB
+          mkdir -p \\$G/strings/0x409
+          echo xiaomi-raphael > \\$G/strings/0x409/manufacturer
+          echo NCM > \\$G/strings/0x409/product
+          echo \\$(cat /etc/machine-id 2>/dev/null || echo "kali-raphael") > \\$G/strings/0x409/serialnumber
+          mkdir -p \\$G/configs/c.1
+          mkdir -p \\$G/configs/c.1/strings/0x409
+          echo NCM > \\$G/configs/c.1/strings/0x409/configuration
+          mkdir -p \\$G/functions/ncm.usb0
+          ln -sf \\$G/functions/ncm.usb0 \\$G/configs/c.1/
+          UDC=\\$(ls /sys/class/udc 2>/dev/null | head -n 1)
+          [ -n "\\$UDC" ] && echo \\$UDC > \\$G/UDC
+          ip link set usb0 up 2>/dev/null || true
+          ip addr add 172.16.42.1/24 dev usb0 2>/dev/null || true
+          OUT=\\$(ip route get 1.1.1.1 2>/dev/null | awk "{print \\$5; exit}")
+          if [ -n "\\$OUT" ]; then
+            sysctl -w net.ipv4.ip_forward=1
+            iptables -t nat -C POSTROUTING -o \\$OUT -j MASQUERADE 2>/dev/null || iptables -t nat -A POSTROUTING -o \\$OUT -j MASQUERADE
+            iptables -C FORWARD -i \\$OUT -o usb0 -m state --state RELATED,ESTABLISHED -j ACCEPT 2>/dev/null || iptables -A FORWARD -i \\$OUT -o usb0 -m state --state RELATED,ESTABLISHED -j ACCEPT
+            iptables -C FORWARD -i usb0 -o \\$OUT -j ACCEPT 2>/dev/null || iptables -A FORWARD -i usb0 -o \\$OUT -j ACCEPT
           fi
-          
-          echo "=== 配置USB NCM ==="
-          cat > rootdir/etc/dnsmasq.d/usb-ncm.conf << EOF
-interface=usb0
-bind-dynamic
-port=0
-dhcp-authoritative
-dhcp-range=172.16.42.2,172.16.42.254,255.255.255.0,1h
-dhcp-option=3,172.16.42.1
-EOF
-          
-          echo "net.ipv4.ip_forward=1" > rootdir/etc/sysctl.d/99-usb-ncm.conf
-          chroot rootdir systemctl enable dnsmasq 2>/dev/null || true
-          
-          cat > rootdir/usr/local/sbin/setup-usb-ncm.sh << SETUPSCRIPT
-#!/bin/sh
-set -e
-modprobe libcomposite 2>/dev/null || true
-mountpoint -q /sys/kernel/config || mount -t configfs none /sys/kernel/config 2>/dev/null || true
-G=/sys/kernel/config/usb_gadget/g1
-mkdir -p \\$G
-echo 0x1d6b > \\$G/idVendor
-echo 0x0104 > \\$G/idProduct
-echo 0x0200 > \\$G/bcdUSB
-mkdir -p \\$G/strings/0x409
-echo xiaomi-raphael > \\$G/strings/0x409/manufacturer
-echo NCM > \\$G/strings/0x409/product
-echo \\$(cat /etc/machine-id 2>/dev/null || echo "kali-raphael") > \\$G/strings/0x409/serialnumber
-mkdir -p \\$G/configs/c.1
-mkdir -p \\$G/configs/c.1/strings/0x409
-echo NCM > \\$G/configs/c.1/strings/0x409/configuration
-mkdir -p \\$G/functions/ncm.usb0
-ln -sf \\$G/functions/ncm.usb0 \\$G/configs/c.1/
-UDC=\\$(ls /sys/class/udc 2>/dev/null | head -n 1)
-[ -n "\\$UDC" ] && echo \\$UDC > \\$G/UDC
-ip link set usb0 up 2>/dev/null || true
-ip addr add 172.16.42.1/24 dev usb0 2>/dev/null || true
-OUT=\\$(ip route get 1.1.1.1 2>/dev/null | awk "{print \\$5; exit}")
-if [ -n "\\$OUT" ]; then
-  sysctl -w net.ipv4.ip_forward=1
-  iptables -t nat -C POSTROUTING -o \\$OUT -j MASQUERADE 2>/dev/null || iptables -t nat -A POSTROUTING -o \\$OUT -j MASQUERADE
-  iptables -C FORWARD -i \\$OUT -o usb0 -m state --state RELATED,ESTABLISHED -j ACCEPT 2>/dev/null || iptables -A FORWARD -i \\$OUT -o usb0 -m state --state RELATED,ESTABLISHED -j ACCEPT
-  iptables -C FORWARD -i usb0 -o \\$OUT -j ACCEPT 2>/dev/null || iptables -A FORWARD -i usb0 -o \\$OUT -j ACCEPT
-fi
-systemctl restart dnsmasq 2>/dev/null || true
-SETUPSCRIPT
-          chmod +x rootdir/usr/local/sbin/setup-usb-ncm.sh
-          
+          systemctl restart dnsmasq 2>/dev/null || true
+          SETUPSCRIPT
+                    chmod +x rootdir/usr/local/sbin/setup-usb-ncm.sh
+                    
           cat > rootdir/etc/systemd/system/usb-ncm.service << EOF
-[Unit]
-Description=USB CDC-NCM gadget setup
-After=network.target
-DefaultDependencies=no
-
-[Service]
-Type=oneshot
-ExecStart=/usr/local/sbin/setup-usb-ncm.sh
-RemainAfterExit=yes
-Restart=on-failure
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-EOF
-          chroot rootdir systemctl enable usb-ncm 2>/dev/null || true
+          [Unit]
+          Description=USB CDC-NCM gadget setup
+          After=network.target
+          DefaultDependencies=no
           
-          echo "=== 配置FSTAB和用户 ==="
-          cat > rootdir/etc/fstab << EOF
-PARTLABEL=userdata / ext4 errors=remount-ro,x-systemd.growfs 0 1
-PARTLABEL=cache /boot vfat umask=0077 0 1
-EOF
+          [Service]
+          Type=oneshot
+          ExecStart=/usr/local/sbin/setup-usb-ncm.sh
+          RemainAfterExit=yes
+          Restart=on-failure
+          RestartSec=5
           
-          echo "root:toor" | chroot rootdir chpasswd
-          chroot rootdir useradd -m -G sudo,audio,video,input,netdev -s /bin/bash kali 2>/dev/null || true
-          echo "kali:kali" | chroot rootdir chpasswd
+          [Install]
+          WantedBy=multi-user.target
+          EOF
+                    chroot rootdir systemctl enable usb-ncm 2>/dev/null || true
+                    
+                    echo "=== 配置FSTAB和用户 ==="
+                    cat > rootdir/etc/fstab << EOF
+          PARTLABEL=userdata / ext4 errors=remount-ro,x-systemd.growfs 0 1
+          PARTLABEL=cache /boot vfat umask=0077 0 1
+          EOF
+                    
+                    echo "root:toor" | chroot rootdir chpasswd
+                    chroot rootdir useradd -m -G sudo,audio,video,input,netdev -s /bin/bash kali 2>/dev/null || true
+                    echo "kali:kali" | chroot rootdir chpasswd
+                    
+                    mkdir -p rootdir/etc/lightdm/lightdm.conf.d
+                    cat > rootdir/etc/lightdm/lightdm.conf.d/50-autologin.conf << EOF
+          [Seat:*]
+          autologin-user=kali
+          autologin-user-timeout=0
+          autologin-session=xfce
+          user-session=xfce
+          EOF
+                    
+                    sed -i "s/#PermitRootLogin prohibit-password/PermitRootLogin yes/" rootdir/etc/ssh/sshd_config
+                    sed -i "s/#PasswordAuthentication yes/PasswordAuthentication yes/" rootdir/etc/ssh/sshd_config
+                    chroot rootdir systemctl enable ssh 2>/dev/null || true
+                    chroot rootdir systemctl enable lightdm 2>/dev/null || true
+                    chroot rootdir systemctl enable NetworkManager 2>/dev/null || true
+                    chroot rootdir systemctl enable bluetooth 2>/dev/null || true
+                    
+                    cat > rootdir/etc/systemd/system/bluetooth-fix.service << EOF
+          [Unit]
+          Description=Bluetooth QCA Firmware Fix
+          After=bluetooth.service systemd-modules-load.service
+          Before=bluetooth.target
+          Wants=systemd-modules-load.service
           
-          mkdir -p rootdir/etc/lightdm/lightdm.conf.d
-          cat > rootdir/etc/lightdm/lightdm.conf.d/50-autologin.conf << EOF
-[Seat:*]
-autologin-user=kali
-autologin-user-timeout=0
-autologin-session=xfce
-user-session=xfce
-EOF
+          [Service]
+          Type=oneshot
+          ExecStart=/bin/bash -c "sleep 3; modprobe hci_qca 2>/dev/null || true; sleep 2; systemctl restart bluetooth || true"
+          RemainAfterExit=yes
           
-          sed -i "s/#PermitRootLogin prohibit-password/PermitRootLogin yes/" rootdir/etc/ssh/sshd_config
-          sed -i "s/#PasswordAuthentication yes/PasswordAuthentication yes/" rootdir/etc/ssh/sshd_config
-          chroot rootdir systemctl enable ssh 2>/dev/null || true
-          chroot rootdir systemctl enable lightdm 2>/dev/null || true
-          chroot rootdir systemctl enable NetworkManager 2>/dev/null || true
-          chroot rootdir systemctl enable bluetooth 2>/dev/null || true
-          
-          cat > rootdir/etc/systemd/system/bluetooth-fix.service << EOF
-[Unit]
-Description=Bluetooth QCA Firmware Fix
-After=bluetooth.service systemd-modules-load.service
-Before=bluetooth.target
-Wants=systemd-modules-load.service
-
-[Service]
-Type=oneshot
-ExecStart=/bin/bash -c "sleep 3; modprobe hci_qca 2>/dev/null || true; sleep 2; systemctl restart bluetooth || true"
-RemainAfterExit=yes
-
-[Install]
-WantedBy=multi-user.target
-EOF
+          [Install]
+          WantedBy=multi-user.target
+          EOF
           chroot rootdir systemctl enable bluetooth-fix.service 2>/dev/null || true
           
           echo "=== 清理和打包 ==="
