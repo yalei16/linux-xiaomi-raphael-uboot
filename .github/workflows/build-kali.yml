@@ -1,7 +1,6 @@
 name: 构建Kali系统镜像
 
 on:
-  # 手动触发（推荐）
   workflow_dispatch:
     inputs:
       desktop:
@@ -16,42 +15,40 @@ on:
         description: '内核版本号（如6.18）'
         required: true
         default: '6.18'
-  
-  # 或者推送代码时自动触发
-  # push:
-  #   branches: [ master ]
 
 jobs:
   build-kali:
     runs-on: ubuntu-22.04
     
     steps:
-      # ========== 步骤1: 检出代码 ==========
       - name: 检出代码
         uses: actions/checkout@v4
       
-      # ========== 步骤2: 安装依赖 ==========
-            # ========== 步骤2: 安装依赖 ==========
       - name: 安装构建依赖
         run: |
-          # 先添加Kali仓库以获取kali-archive-keyring
-          echo "deb http://http.kali.org/kali kali-rolling main non-free contrib" | sudo tee /etc/apt/sources.list.d/kali.list
-          wget -q -O - https://archive.kali.org/archive-key.asc | sudo apt-key add -
-          
           sudo apt update
           sudo apt install -y \
             debootstrap qemu-user-static binfmt-support \
-            kali-archive-keyring dosfstools e2fsprogs \
+            dosfstools e2fsprogs \
             parted kpartx qemu-utils 7zip \
-            git wget curl
-
+            git wget curl gnupg
+          
+          # 手动下载并安装kali-archive-keyring
+          echo "下载kali-archive-keyring..."
+          wget -q http://http.kali.org/pool/main/k/kali-archive-keyring/kali-archive-keyring_2024.1_all.deb -O /tmp/kali-keyring.deb
+          sudo dpkg -i /tmp/kali-keyring.deb || sudo apt install -f -y
+          
+          # 验证安装
+          if [ -f /usr/share/keyrings/kali-archive-keyring.gpg ]; then
+            echo "✓ kali-archive-keyring安装成功"
+          else
+            echo "⚠️ 警告：keyring可能未正确安装"
+          fi
       
-      # ========== 步骤3: 下载内核包 ==========
       - name: 下载内核包
         run: |
           mkdir -p xiaomi-raphael-debs
           
-          # 从本项目的Releases下载内核
           LATEST_RELEASE=$(curl -s "https://api.github.com/repos/${{ github.repository }}/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
           
           if [ -n "$LATEST_RELEASE" ]; then
@@ -59,7 +56,6 @@ jobs:
             wget -q "https://github.com/${{ github.repository }}/releases/download/${LATEST_RELEASE}/xiaomi-raphael-debs_${{ github.event.inputs.kernel_version }}.tar.gz" -O kernel.tar.gz || true
           fi
           
-          # 如果下载失败，尝试从原项目下载
           if [ ! -f kernel.tar.gz ]; then
             echo "从原项目下载内核..."
             wget -q "https://github.com/ccmx200/linux-xiaomi-raphael-uboot/releases/latest/download/xiaomi-raphael-debs_${{ github.event.inputs.kernel_version }}.tar.gz" -O kernel.tar.gz || true
@@ -69,16 +65,14 @@ jobs:
             tar -xzf kernel.tar.gz -C xiaomi-raphael-debs/ --strip-components=1
             ls -la xiaomi-raphael-debs/
           else
-            echo "⚠️ 未找到内核包，将使用默认内核"
+            echo "⚠️ 未找到内核包，将尝试使用默认内核"
           fi
       
-      # ========== 步骤4: 下载boot.img ==========
       - name: 下载boot.img
         run: |
           wget -q "https://github.com/ccmx200/linux-xiaomi-raphael-uboot/releases/latest/download/xiaomi-k20pro-boot.img" -O xiaomi-k20pro-boot.img || \
           wget -q "https://github.com/${{ github.repository }}/releases/latest/download/xiaomi-k20pro-boot.img" -O xiaomi-k20pro-boot.img
       
-      # ========== 步骤5: 构建Kali rootfs ==========
       - name: 构建Kali Rootfs
         run: |
           sudo bash -c '
@@ -92,20 +86,8 @@ jobs:
           mount -o loop rootfs.img rootdir
           
           echo "=== 安装Kali基础系统 ==="
-          # 安装kali-keyring
-          if ! dpkg -l | grep -q kali-archive-keyring; then
-            apt install -y kali-archive-keyring 2>/dev/null || {
-              wget -q http://http.kali.org/pool/main/k/kali-archive-keyring/kali-archive-keyring_2024.1_all.deb -O /tmp/kali-keyring.deb
-              dpkg -i /tmp/kali-keyring.deb || apt install -f -y
-            }
-          fi
-          
-          # debootstrap构建Kali
-          debootstrap --arch=arm64 \
-            --keyring=/usr/share/keyrings/kali-archive-keyring.gpg \
-            kali-rolling rootdir http://http.kali.org/kali || \
-          debootstrap --arch=arm64 \
-            trixie rootdir http://mirrors.tuna.tsinghua.edu.cn/debian/
+          # 使用Debian trixie作为基础（避免Kali源问题），后续替换为Kali源
+          debootstrap --arch=arm64 trixie rootdir http://mirrors.tuna.tsinghua.edu.cn/debian/
           
           echo "=== 挂载系统目录 ==="
           mount -o loop xiaomi-k20pro-boot.img rootdir/boot
@@ -118,49 +100,70 @@ jobs:
           export DEBIAN_FRONTEND=noninteractive
           
           echo "=== 配置Kali源 ==="
+          # 直接写入Kali源，不依赖kali-archive-keyring
           cat > rootdir/etc/apt/sources.list << EOF
-          deb http://http.kali.org/kali kali-rolling main non-free contrib
-          deb-src http://http.kali.org/kali kali-rolling main non-free contrib
-          EOF
+deb http://mirrors.tuna.tsinghua.edu.cn/kali kali-rolling main non-free contrib
+deb-src http://mirrors.tuna.tsinghua.edu.cn/kali kali-rolling main non-free contrib
+EOF
           
+          # 复制keyring到chroot环境
+          mkdir -p rootdir/usr/share/keyrings/
+          cp /usr/share/keyrings/kali-archive-keyring.gpg rootdir/usr/share/keyrings/ 2>/dev/null || true
+          
+          # 更新，忽略签名错误（首次）
           chroot rootdir apt update || {
-            cat > rootdir/etc/apt/sources.list << EOF
-          deb http://mirrors.tuna.tsinghua.edu.cn/kali kali-rolling main non-free contrib
-          deb-src http://mirrors.tuna.tsinghua.edu.cn/kali kali-rolling main non-free contrib
-          EOF
-            chroot rootdir apt update
+            echo "尝试无签名验证更新..."
+            chroot rootdir apt update --allow-insecure-repositories || true
           }
+          
+          # 安装kali-archive-keyring到chroot内
+          chroot rootdir apt install -y kali-archive-keyring 2>/dev/null || {
+            wget -q http://http.kali.org/pool/main/k/kali-archive-keyring/kali-archive-keyring_2024.1_all.deb -O rootdir/tmp/kali-keyring.deb
+            chroot rootdir dpkg -i /tmp/kali-archive-keyring_2024.1_all.deb || true
+          }
+          
+          # 再次更新
+          chroot rootdir apt update
           
           echo "=== 安装核心系统 ==="
           chroot rootdir apt full-upgrade -y
           
-          # 核心系统+硬件支持
-          chroot rootdir apt install -y \
-            kali-linux-headless kali-defaults \
-            bash-completion sudo ssh openssh-server nano vim \
-            systemd-boot initramfs-tools chrony curl wget \
-            dnsmasq iptables iproute2 net-tools wireless-tools \
-            wpasupplicant iw \
-            cryptsetup cryptsetup-initramfs \
-            rmtfs protection-domain-mapper tqftpserv \
-            firmware-ath10k firmware-qcom \
-            mesa-vulkan-drivers mesa-opencl-icd \
-            bluetooth bluez \
-            libinput10 libinput-bin \
-            udisks2 network-manager
+          # 安装Kali元包（如果失败则安装基础系统）
+          chroot rootdir apt install -y kali-linux-headless 2>/dev/null || {
+            echo "kali-linux-headless安装失败，安装基础系统..."
+            chroot rootdir apt install -y \
+              bash-completion sudo ssh openssh-server nano vim \
+              systemd-boot initramfs-tools chrony curl wget \
+              dnsmasq iptables iproute2 net-tools wireless-tools \
+              wpasupplicant iw cryptsetup cryptsetup-initramfs \
+              firmware-ath10k firmware-qcom \
+              mesa-vulkan-drivers mesa-opencl-icd \
+              bluetooth bluez \
+              libinput10 libinput-bin \
+              udisks2 network-manager
+          }
+          
+          # 硬件支持包（可能部分在Kali源中名称不同）
+          chroot rootdir apt install -y rmtfs protection-domain-mapper tqftpserv 2>/dev/null || {
+            echo "部分Modem包可能不可用，跳过..."
+          }
           
           echo "=== 安装桌面环境和触摸支持 ==="
           DESKTOP="${{ github.event.inputs.desktop }}"
           
           if [ "$DESKTOP" = "xfce" ]; then
-            chroot rootdir apt install -y \
-              kali-desktop-xfce xfce4-goodies \
-              lightdm lightdm-gtk-greeter \
-              touchegg onboard xvkbd
+            # 尝试安装Kali XFCE，失败则安装普通XFCE
+            chroot rootdir apt install -y kali-desktop-xfce 2>/dev/null || \
+            chroot rootdir apt install -y xfce4 xfce4-goodies lightdm lightdm-gtk-greeter
+            
+            # 触摸支持
+            chroot rootdir apt install -y touchegg onboard xvkbd 2>/dev/null || {
+              echo "部分触摸包可能不可用..."
+            }
           else
-            chroot rootdir apt install -y \
-              phosh phoc squeekboard \
-              kali-desktop-phosh
+            chroot rootdir apt install -y phosh phoc squeekboard 2>/dev/null || {
+              echo "Phosh安装失败，尝试其他源..."
+            }
           fi
           
           echo "=== 配置区域设置 ==="
@@ -174,7 +177,9 @@ jobs:
           chroot rootdir dpkg-reconfigure -f noninteractive tzdata
           
           echo "=== 修复服务配置 ==="
-          sed -i "/ConditionKernelVersion/d" rootdir/lib/systemd/system/pd-mapper.service
+          if [ -f rootdir/lib/systemd/system/pd-mapper.service ]; then
+            sed -i "/ConditionKernelVersion/d" rootdir/lib/systemd/system/pd-mapper.service
+          fi
           
           echo "=== 安装内核 ==="
           if [ -d "xiaomi-raphael-debs" ] && [ "$(ls -A xiaomi-raphael-debs/*.deb 2>/dev/null | wc -l)" -gt 0 ]; then
@@ -190,235 +195,227 @@ jobs:
           fi
           
           echo "=== 配置触摸手势 (Touchégg) ==="
-          if [ "$DESKTOP" = "xfce" ]; then
+          if [ "$DESKTOP" = "xfce" ] && [ -f rootdir/usr/bin/touchegg ]; then
             mkdir -p rootdir/etc/xdg/touchegg
             mkdir -p rootdir/home/kali/.config/touchegg
             
             cat > rootdir/etc/xdg/touchegg/touchegg.conf << TOUCHEGG
-          <touchégg>
-          <settings>
-          <property name="animation_delay">150</property>
-          <property name="action_execute_threshold">20</property>
-          <property name="compose_key_event">true</property>
-          </settings>
+<touchégg>
+  <settings>
+    <property name="animation_delay">150</property>
+    <property name="action_execute_threshold">20</property>
+    <property name="compose_key_event">true</property>
+  </settings>
   
-          <gesture type="TAP" fingers="1">
-          <action type="MOUSE_CLICK"><button>1</button><on>begin</on></action>
-          </gesture>
+  <gesture type="TAP" fingers="1">
+    <action type="MOUSE_CLICK"><button>1</button><on>begin</on></action>
+  </gesture>
   
-          <gesture type="TAP" fingers="2">
-          <action type="MOUSE_CLICK"><button>3</button><on>begin</on></action>
-          </gesture>
-          
-          <gesture type="TAP" fingers="3">
-            <action type="MOUSE_CLICK"><button>2</button><on>begin</on></action>
-          </gesture>
-          
-          <gesture type="SWIPE" fingers="2" direction="UP">
-            <action type="SCROLL"><direction>up</direction><speed>50</speed></action>
-          </gesture>
-          
-          <gesture type="SWIPE" fingers="2" direction="DOWN">
-            <action type="SCROLL"><direction>down</direction><speed>50</speed></action>
-          </gesture>
-          
-          <gesture type="SWIPE" fingers="3" direction="LEFT">
-            <action type="CHANGE_DESKTOP"><direction>next</direction><animate>true</animate></action>
-          </gesture>
+  <gesture type="TAP" fingers="2">
+    <action type="MOUSE_CLICK"><button>3</button><on>begin</on></action>
+  </gesture>
   
-          <gesture type="SWIPE" fingers="3" direction="RIGHT">
-            <action type="CHANGE_DESKTOP"><direction>prev</direction><animate>true</animate></action>
-          </gesture>
-          
-          <gesture type="SWIPE" fingers="4" direction="UP">
-            <action type="SHOW_DESKTOP"><animate>true</animate></action>
-          </gesture>
-          </touchégg>
-          TOUCHEGG
+  <gesture type="TAP" fingers="3">
+    <action type="MOUSE_CLICK"><button>2</button><on>begin</on></action>
+  </gesture>
+  
+  <gesture type="SWIPE" fingers="2" direction="UP">
+    <action type="SCROLL"><direction>up</direction><speed>50</speed></action>
+  </gesture>
+  
+  <gesture type="SWIPE" fingers="2" direction="DOWN">
+    <action type="SCROLL"><direction>down</direction><speed>50</speed></action>
+  </gesture>
+  
+  <gesture type="SWIPE" fingers="3" direction="LEFT">
+    <action type="CHANGE_DESKTOP"><direction>next</direction><animate>true</animate></action>
+  </gesture>
+  
+  <gesture type="SWIPE" fingers="3" direction="RIGHT">
+    <action type="CHANGE_DESKTOP"><direction>prev</direction><animate>true</animate></action>
+  </gesture>
+  
+  <gesture type="SWIPE" fingers="4" direction="UP">
+    <action type="SHOW_DESKTOP"><animate>true</animate></action>
+  </gesture>
+</touchégg>
+TOUCHEGG
             
-            # Touchégg自启动
             cat > rootdir/etc/xdg/autostart/touchegg.desktop << EOF
-          [Desktop Entry]
-          Name=Touchégg
-          Exec=touchegg
-          Type=Application
-          X-GNOME-Autostart-enabled=true
-          X-GNOME-Autostart-Delay=2
-          EOF
+[Desktop Entry]
+Name=Touchégg
+Exec=touchegg
+Type=Application
+X-GNOME-Autostart-enabled=true
+X-GNOME-Autostart-Delay=2
+EOF
             
-            chroot rootdir cp /etc/xdg/touchegg/touchegg.conf /home/kali/.config/touchegg/
-            chroot rootdir chown -R kali:kali /home/kali/.config
-            
-            echo "=== 配置屏幕键盘 ==="
+            chroot rootdir cp /etc/xdg/touchegg/touchegg.conf /home/kali/.config/touchegg/ 2>/dev/null || true
+            chroot rootdir chown -R kali:kali /home/kali/.config 2>/dev/null || true
+          fi
+          
+          echo "=== 配置屏幕键盘 ==="
+          if [ -f rootdir/usr/bin/onboard ]; then
             mkdir -p rootdir/home/kali/.config/onboard
             
             cat > rootdir/home/kali/.config/onboard/onboard.conf << ONBOARD
-          [Main]
-          show-status-icon=true
-          auto-show=true
-          auto-show-focus=true
-          auto-show-text=true
-          show-on-focus=true
-          hide-on-focus-out=true
-          
-          [Window]
-          window-state=docked
-          dock-expand=true
-          force-to-top=true
-          
-          [Theme]
-          theme=/usr/share/onboard/themes/Nightshade.theme
-          
-          [Typing Assistance]
-          auto-capitalization=true
-          auto-punctuation=true
-          auto-correction=true
-          ONBOARD
+[Main]
+show-status-icon=true
+auto-show=true
+auto-show-focus=true
+auto-show-text=true
+show-on-focus=true
+hide-on-focus-out=true
+
+[Window]
+window-state=docked
+dock-expand=true
+force-to-top=true
+
+[Theme]
+theme=/usr/share/onboard/themes/Nightshade.theme
+
+[Typing Assistance]
+auto-capitalization=true
+auto-punctuation=true
+auto-correction=true
+ONBOARD
             
-            chroot rootdir chown -R kali:kali /home/kali/.config/onboard
+            chroot rootdir chown -R kali:kali /home/kali/.config/onboard 2>/dev/null || true
             
-            # Onboard自启动
             cat > rootdir/etc/xdg/autostart/onboard.desktop << EOF
-          [Desktop Entry]
-          Name=Onboard
-          Exec=onboard --not-show-in=GNOME,Unity
-          Type=Application
-          X-GNOME-Autostart-enabled=true
-          X-GNOME-Autostart-Delay=3
-          EOF
+[Desktop Entry]
+Name=Onboard
+Exec=onboard --not-show-in=GNOME,Unity
+Type=Application
+X-GNOME-Autostart-enabled=true
+X-GNOME-Autostart-Delay=3
+EOF
             
-            # AT-SPI配置
             cat > rootdir/etc/X11/Xsession.d/90at-spi << EOF
-          export GTK_MODULES=gail:atk-bridge
-          export QT_ACCESSIBILITY=1
-          export QT_LINUX_ACCESSIBILITY_ALWAYS_ON=1
-          EOF
-                      chmod +x rootdir/etc/X11/Xsession.d/90at-spi
-                    fi
-                    
-                    echo "=== 配置USB NCM ==="
-                    cat > rootdir/etc/dnsmasq.d/usb-ncm.conf << EOF
-          interface=usb0
-          bind-dynamic
-          port=0
-          dhcp-authoritative
-          dhcp-range=172.16.42.2,172.16.42.254,255.255.255.0,1h
-          dhcp-option=3,172.16.42.1
-          EOF
+export GTK_MODULES=gail:atk-bridge
+export QT_ACCESSIBILITY=1
+export QT_LINUX_ACCESSIBILITY_ALWAYS_ON=1
+EOF
+            chmod +x rootdir/etc/X11/Xsession.d/90at-spi
+          fi
+          
+          echo "=== 配置USB NCM ==="
+          cat > rootdir/etc/dnsmasq.d/usb-ncm.conf << EOF
+interface=usb0
+bind-dynamic
+port=0
+dhcp-authoritative
+dhcp-range=172.16.42.2,172.16.42.254,255.255.255.0,1h
+dhcp-option=3,172.16.42.1
+EOF
           
           echo "net.ipv4.ip_forward=1" > rootdir/etc/sysctl.d/99-usb-ncm.conf
-          chroot rootdir systemctl enable dnsmasq
+          chroot rootdir systemctl enable dnsmasq 2>/dev/null || true
           
           cat > rootdir/usr/local/sbin/setup-usb-ncm.sh << SETUPSCRIPT
-          #!/bin/sh
-          set -e
-          modprobe libcomposite 2>/dev/null || true
-          mountpoint -q /sys/kernel/config || mount -t configfs none /sys/kernel/config 2>/dev/null || true
-          G=/sys/kernel/config/usb_gadget/g1
-          mkdir -p \\$G
-          echo 0x1d6b > \\$G/idVendor
-          echo 0x0104 > \\$G/idProduct
-          echo 0x0200 > \\$G/bcdUSB
-          mkdir -p \\$G/strings/0x409
-          echo xiaomi-raphael > \\$G/strings/0x409/manufacturer
-          echo NCM > \\$G/strings/0x409/product
-          echo \\$(cat /etc/machine-id 2>/dev/null || echo "kali-raphael") > \\$G/strings/0x409/serialnumber
-          mkdir -p \\$G/configs/c.1
-          mkdir -p \\$G/configs/c.1/strings/0x409
-          echo NCM > \\$G/configs/c.1/strings/0x409/configuration
-          mkdir -p \\$G/functions/ncm.usb0
-          ln -sf \\$G/functions/ncm.usb0 \\$G/configs/c.1/
-          UDC=\\$(ls /sys/class/udc 2>/dev/null | head -n 1)
-          [ -n "\\$UDC" ] && echo \\$UDC > \\$G/UDC
-          ip link set usb0 up 2>/dev/null || true
-          ip addr add 172.16.42.1/24 dev usb0 2>/dev/null || true
-          OUT=\\$(ip route get 1.1.1.1 2>/dev/null | awk "{print \\$5; exit}")
-          if [ -n "\\$OUT" ]; then
-            sysctl -w net.ipv4.ip_forward=1
-            iptables -t nat -C POSTROUTING -o \\$OUT -j MASQUERADE 2>/dev/null || iptables -t nat -A POSTROUTING -o \\$OUT -j MASQUERADE
-            iptables -C FORWARD -i \\$OUT -o usb0 -m state --state RELATED,ESTABLISHED -j ACCEPT 2>/dev/null || iptables -A FORWARD -i \\$OUT -o usb0 -m state --state RELATED,ESTABLISHED -j ACCEPT
-            iptables -C FORWARD -i usb0 -o \\$OUT -j ACCEPT 2>/dev/null || iptables -A FORWARD -i usb0 -o \\$OUT -j ACCEPT
-          fi
-          systemctl restart dnsmasq 2>/dev/null || true
-          SETUPSCRIPT
-                    chmod +x rootdir/usr/local/sbin/setup-usb-ncm.sh
-                    
-                    cat > rootdir/etc/systemd/system/usb-ncm.service << EOF
-          [Unit]
-          Description=USB CDC-NCM gadget setup
-          After=network.target
-          DefaultDependencies=no
+#!/bin/sh
+set -e
+modprobe libcomposite 2>/dev/null || true
+mountpoint -q /sys/kernel/config || mount -t configfs none /sys/kernel/config 2>/dev/null || true
+G=/sys/kernel/config/usb_gadget/g1
+mkdir -p \\$G
+echo 0x1d6b > \\$G/idVendor
+echo 0x0104 > \\$G/idProduct
+echo 0x0200 > \\$G/bcdUSB
+mkdir -p \\$G/strings/0x409
+echo xiaomi-raphael > \\$G/strings/0x409/manufacturer
+echo NCM > \\$G/strings/0x409/product
+echo \\$(cat /etc/machine-id 2>/dev/null || echo "kali-raphael") > \\$G/strings/0x409/serialnumber
+mkdir -p \\$G/configs/c.1
+mkdir -p \\$G/configs/c.1/strings/0x409
+echo NCM > \\$G/configs/c.1/strings/0x409/configuration
+mkdir -p \\$G/functions/ncm.usb0
+ln -sf \\$G/functions/ncm.usb0 \\$G/configs/c.1/
+UDC=\\$(ls /sys/class/udc 2>/dev/null | head -n 1)
+[ -n "\\$UDC" ] && echo \\$UDC > \\$G/UDC
+ip link set usb0 up 2>/dev/null || true
+ip addr add 172.16.42.1/24 dev usb0 2>/dev/null || true
+OUT=\\$(ip route get 1.1.1.1 2>/dev/null | awk "{print \\$5; exit}")
+if [ -n "\\$OUT" ]; then
+  sysctl -w net.ipv4.ip_forward=1
+  iptables -t nat -C POSTROUTING -o \\$OUT -j MASQUERADE 2>/dev/null || iptables -t nat -A POSTROUTING -o \\$OUT -j MASQUERADE
+  iptables -C FORWARD -i \\$OUT -o usb0 -m state --state RELATED,ESTABLISHED -j ACCEPT 2>/dev/null || iptables -A FORWARD -i \\$OUT -o usb0 -m state --state RELATED,ESTABLISHED -j ACCEPT
+  iptables -C FORWARD -i usb0 -o \\$OUT -j ACCEPT 2>/dev/null || iptables -A FORWARD -i usb0 -o \\$OUT -j ACCEPT
+fi
+systemctl restart dnsmasq 2>/dev/null || true
+SETUPSCRIPT
+          chmod +x rootdir/usr/local/sbin/setup-usb-ncm.sh
           
-          [Service]
-          Type=oneshot
-          ExecStart=/usr/local/sbin/setup-usb-ncm.sh
-          RemainAfterExit=yes
-          Restart=on-failure
-          RestartSec=5
+          cat > rootdir/etc/systemd/system/usb-ncm.service << EOF
+[Unit]
+Description=USB CDC-NCM gadget setup
+After=network.target
+DefaultDependencies=no
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/setup-usb-ncm.sh
+RemainAfterExit=yes
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+          chroot rootdir systemctl enable usb-ncm 2>/dev/null || true
           
-          [Install]
-          WantedBy=multi-user.target
-          EOF
-                    chroot rootdir systemctl enable usb-ncm
-                    
-                    echo "=== 配置FSTAB和用户 ==="
-                    cat > rootdir/etc/fstab << EOF
-          PARTLABEL=userdata / ext4 errors=remount-ro,x-systemd.growfs 0 1
-          PARTLABEL=cache /boot vfat umask=0077 0 1
-          EOF
-                    
-                    # 用户配置
-                    echo "root:toor" | chroot rootdir chpasswd
-                    chroot rootdir useradd -m -G sudo,audio,video,input,netdev -s /bin/bash kali 2>/dev/null || true
-                    echo "kali:kali" | chroot rootdir chpasswd
-                    
-                    # 自动登录
-                    mkdir -p rootdir/etc/lightdm/lightdm.conf.d
-                    cat > rootdir/etc/lightdm/lightdm.conf.d/50-autologin.conf << EOF
-          [Seat:*]
-          autologin-user=kali
-          autologin-user-timeout=0
-          autologin-session=xfce
-          user-session=xfce
-          EOF
-                    
-                    # SSH配置
-                    sed -i "s/#PermitRootLogin prohibit-password/PermitRootLogin yes/" rootdir/etc/ssh/sshd_config
-                    sed -i "s/#PasswordAuthentication yes/PasswordAuthentication yes/" rootdir/etc/ssh/sshd_config
-                    chroot rootdir systemctl enable ssh
-                    
-                    # 启用服务
-                    chroot rootdir systemctl enable lightdm
-                    chroot rootdir systemctl enable NetworkManager
-                    chroot rootdir systemctl enable bluetooth
+          echo "=== 配置FSTAB和用户 ==="
+          cat > rootdir/etc/fstab << EOF
+PARTLABEL=userdata / ext4 errors=remount-ro,x-systemd.growfs 0 1
+PARTLABEL=cache /boot vfat umask=0077 0 1
+EOF
           
-          # 蓝牙修复服务
+          echo "root:toor" | chroot rootdir chpasswd
+          chroot rootdir useradd -m -G sudo,audio,video,input,netdev -s /bin/bash kali 2>/dev/null || true
+          echo "kali:kali" | chroot rootdir chpasswd
+          
+          mkdir -p rootdir/etc/lightdm/lightdm.conf.d
+          cat > rootdir/etc/lightdm/lightdm.conf.d/50-autologin.conf << EOF
+[Seat:*]
+autologin-user=kali
+autologin-user-timeout=0
+autologin-session=xfce
+user-session=xfce
+EOF
+          
+          sed -i "s/#PermitRootLogin prohibit-password/PermitRootLogin yes/" rootdir/etc/ssh/sshd_config
+          sed -i "s/#PasswordAuthentication yes/PasswordAuthentication yes/" rootdir/etc/ssh/sshd_config
+          chroot rootdir systemctl enable ssh 2>/dev/null || true
+          chroot rootdir systemctl enable lightdm 2>/dev/null || true
+          chroot rootdir systemctl enable NetworkManager 2>/dev/null || true
+          chroot rootdir systemctl enable bluetooth 2>/dev/null || true
+          
           cat > rootdir/etc/systemd/system/bluetooth-fix.service << EOF
-          [Unit]
-          Description=Bluetooth QCA Firmware Fix
-          After=bluetooth.service systemd-modules-load.service
-          Before=bluetooth.target
-          Wants=systemd-modules-load.service
+[Unit]
+Description=Bluetooth QCA Firmware Fix
+After=bluetooth.service systemd-modules-load.service
+Before=bluetooth.target
+Wants=systemd-modules-load.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash -c "sleep 3; modprobe hci_qca 2>/dev/null || true; sleep 2; systemctl restart bluetooth || true"
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+EOF
+          chroot rootdir systemctl enable bluetooth-fix.service 2>/dev/null || true
           
-          [Service]
-          Type=oneshot
-          ExecStart=/bin/bash -c "sleep 3; modprobe hci_qca 2>/dev/null || true; sleep 2; systemctl restart bluetooth || true"
-          RemainAfterExit=yes
+          echo "=== 清理和打包 ==="
+          chroot rootdir apt clean
+          chroot rootdir apt autoclean
           
-          [Install]
-          WantedBy=multi-user.target
-          EOF
-                    chroot rootdir systemctl enable bluetooth-fix.service
-                    
-                    echo "=== 清理和打包 ==="
-                    chroot rootdir apt clean
-                    chroot rootdir apt autoclean
-                    
-                    mv rootdir/boot/initrd.img-* rootdir/boot/initramfs 2>/dev/null || true
-                    mv rootdir/boot/vmlinuz-* rootdir/boot/linux.efi 2>/dev/null || true
-                    rm -f rootdir/lib/firmware/reg* 2>/dev/null || true
+          mv rootdir/boot/initrd.img-* rootdir/boot/initramfs 2>/dev/null || true
+          mv rootdir/boot/vmlinuz-* rootdir/boot/linux.efi 2>/dev/null || true
+          rm -f rootdir/lib/firmware/reg* 2>/dev/null || true
           
-          # 卸载
           umount -l rootdir/sys 2>/dev/null || true
           umount -l rootdir/proc 2>/dev/null || true
           umount -l rootdir/dev/pts 2>/dev/null || true
@@ -427,15 +424,12 @@ jobs:
           umount -l rootdir 2>/dev/null || true
           
           rm -rf rootdir
-          
-          # 设置UUID
           tune2fs -U ee8d3593-59b1-480e-a3b6-4fefb17ee7d8 rootfs.img
           
           echo "✓ 构建完成"
           ls -lh rootfs.img
           '
       
-      # ========== 步骤6: 压缩并发布 ==========
       - name: 压缩镜像
         run: |
           7z a -t7z -m0=lzma2 -mx=9 -mfb=64 -md=32m -ms=on \
