@@ -1091,6 +1091,54 @@ jobs:
           
           ls -lh release-files/ 2>/dev/null || echo "No files to list"
 
+      # 方案一：分卷压缩（每个文件不超过1.9GB以安全上传到Release）
+      - name: 分卷压缩大文件
+        run: |
+          cd release-files
+          
+          # 检查文件大小，如果超过1.9GB则进行分卷
+          for file in *.img *.zst *.gz *.tar.gz; do
+            if [ -f "$file" ]; then
+              size=$(stat -c%s "$file" 2>/dev/null || stat -f%z "$file" 2>/dev/null || echo "0")
+              # 1.9GB = 2040109465 bytes
+              if [ "$size" -gt 2040109465 ]; then
+                echo "文件 $file 太大 (${size} bytes)，进行分卷压缩..."
+                # 使用 1.5GB 分卷大小（留出安全余量）
+                split -b 1500m "$file" "${file}.part."
+                # 删除原文件，保留分卷
+                rm -f "$file"
+                # 创建合并说明
+                echo "$file" > "${file}.reconstruct.txt"
+                echo "分卷文件列表:" >> "${file}.reconstruct.txt"
+                ls -1 "${file}.part."* >> "${file}.reconstruct.txt"
+                echo "" >> "${file}.reconstruct.txt"
+                echo "合并方法 (Linux/Mac):" >> "${file}.reconstruct.txt"
+                echo "  cat ${file}.part.* > ${file}" >> "${file}.reconstruct.txt"
+                echo "" >> "${file}.reconstruct.txt"
+                echo "合并方法 (Windows CMD):" >> "${file}.reconstruct.txt"
+                echo "  copy /b ${file}.part.aa + ${file}.part.ab + ... ${file}" >> "${file}.reconstruct.txt"
+                echo "" >> "${file}.reconstruct.txt"
+                echo "合并方法 (Windows PowerShell):" >> "${file}.reconstruct.txt"
+                echo "  Get-Content ${file}.part.* -Raw | Set-Content ${file} -NoNewline" >> "${file}.reconstruct.txt"
+              fi
+            fi
+          done
+          
+          # 列出最终文件
+          echo "=== 最终待上传文件列表 ==="
+          ls -lh
+
+      # 方案二：上传到 GitHub Artifact（作为备选下载方式）
+      - name: 上传到 GitHub Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kali-rootfs-${{ inputs.desktop_environment }}-${{ github.run_number }}
+          path: release-files/*
+          retention-days: 30
+          compression-level: 0  # 已经压缩过了，不需要再压缩
+        continue-on-error: true
+
+      # 方案三：上传到 Release（支持大文件分卷）
       - name: 上传到 GitHub Release
         uses: softprops/action-gh-release@v1
         with:
@@ -1114,6 +1162,34 @@ jobs:
             - ✅ 电池/RTC/LED 支持
             - ✅ 渗透测试工具集 (Kali Linux 工具，部分可能因仓库可用性而异)
             
+            ### 📥 下载方式
+            **方式1 - GitHub Release（推荐）:**
+            直接下载下方 Assets 中的文件
+            
+            **方式2 - GitHub Artifact:**
+            如果 Release 上传失败，请从页面顶部的 "Artifacts" 部分下载
+            
+            ### 📦 文件说明
+            - `kali-raphael-rootfs.img.zst` / `.gz` - 压缩后的 rootfs 镜像（Fastboot 刷入）
+            - `kali-raphael-rootfs.tar.gz` - TWRP 卡刷包（解压到分区）
+            - `*.part.aa`, `*.part.ab`... - 分卷文件（如果原文件超过2GB）
+            
+            ### 🔧 分卷文件合并方法
+            **Linux/Mac:**
+            ```bash
+            cat kali-raphael-rootfs.img.zst.part.* > kali-raphael-rootfs.img.zst
+            ```
+            
+            **Windows CMD:**
+            ```cmd
+            copy /b kali-raphael-rootfs.img.zst.part.aa + kali-raphael-rootfs.img.zst.part.ab + ... kali-raphael-rootfs.img.zst
+            ```
+            
+            **Windows PowerShell:**
+            ```powershell
+            Get-Content kali-raphael-rootfs.img.zst.part.* -Raw | Set-Content kali-raphael-rootfs.img.zst -NoNewline
+            ```
+            
             ### 刷机方法
             1. **Fastboot**: `fastboot flash userdata kali-raphael-rootfs.img`
             2. **TWRP**: 解压 tar.gz 到目标分区
@@ -1126,6 +1202,7 @@ jobs:
             ### 注意事项
             - 部分渗透测试工具可能因 Kali 仓库更新而不可用
             - 构建日志已附加，可查看具体安装了哪些包
+            - 如果下载分卷文件，请务必下载所有 part 文件后再合并
           files: |
             release-files/*
         env:
