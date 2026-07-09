@@ -14,7 +14,7 @@ on:
       system_types:
         description: '系统类型 (用逗号分隔多个值，如: debian-server,debian-gnome)'
         required: false
-        default: 'debian-server,debian-gnome,debian-phosh,ubuntu-server,ubuntu-gnome,ubuntu-phosh'
+        default: 'debian-server,debian-gnome,debian-phosh,ubuntu-server,ubuntu-gnome,ubuntu-phosh,kali-server,kali-gnome'
         type: string
       kernel_versions:
         description: '内核版本 (默认7.1)'
@@ -40,6 +40,11 @@ on:
         description: 'Ubuntu 版本 (用逗号分隔多个值，如: noble,resolute)'
         required: false
         default: 'resolute'
+        type: string
+      kali_versions:
+        description: 'Kali 版本 (用逗号分隔多个值，如: kali-rolling)'
+        required: false
+        default: 'kali-rolling'
         type: string
       kernel_repository:
         description: '内核包仓库'
@@ -84,7 +89,7 @@ jobs:
         id: generate
         run: |
           set -e
-          
+
           BUILD_MODE="${{ github.event.inputs.build_mode }}"
           echo "build_mode=${BUILD_MODE}" >> $GITHUB_OUTPUT
           SYS_TYPES="${{ github.event.inputs.system_types }}"
@@ -93,41 +98,51 @@ jobs:
           DESKTOP_ENV="${{ github.event.inputs.desktop_environments }}"
           DEB_VERS="${{ github.event.inputs.debian_versions }}"
           UBU_VERS="${{ github.event.inputs.ubuntu_versions }}"
-          
+          KALI_VERS="${{ github.event.inputs.kali_versions }}"
+
           if [ "$BUILD_MODE" = "single" ]; then
             # 单模式：取每个输入的第一个值
             SYS_TYPE=$(echo "$SYS_TYPES" | cut -d',' -f1)
             KERN_VER=$(echo "$KERN_VERS" | cut -d',' -f1)
             TOOL=$(echo "$BOOT_TOOLS" | cut -d',' -f1)
-            
+
             if [[ "$SYS_TYPE" == debian-* ]]; then
               DEB_VER=$(echo "$DEB_VERS" | cut -d',' -f1)
               UBU_VER=""
+              KALI_VER=""
               OS_VER="$DEB_VER"
-            else
+            elif [[ "$SYS_TYPE" == ubuntu-* ]]; then
               DEB_VER=""
               UBU_VER=$(echo "$UBU_VERS" | cut -d',' -f1)
+              KALI_VER=""
               OS_VER="$UBU_VER"
+            else  # kali-*
+              DEB_VER=""
+              UBU_VER=""
+              KALI_VER=$(echo "$KALI_VERS" | cut -d',' -f1)
+              OS_VER="$KALI_VER"
             fi
-            
+
             # 输出单个构建的信息供 release job 使用
             echo "single_system_type=${SYS_TYPE}" >> $GITHUB_OUTPUT
             echo "single_kernel_version=${KERN_VER}" >> $GITHUB_OUTPUT
             echo "single_os_version=${OS_VER}" >> $GITHUB_OUTPUT
-            
-            MATRIX="[{"system_type":"$SYS_TYPE","kernel_version":"$KERN_VER","bootstrap_tool":"$TOOL","debian_version":"$DEB_VER","ubuntu_version":"$UBU_VER","desktop_env":"$DESKTOP_ENV"}]"
+            echo "single_kali_version=${KALI_VER}" >> $GITHUB_OUTPUT
+
+            MATRIX="[{"system_type":"$SYS_TYPE","kernel_version":"$KERN_VER","bootstrap_tool":"$TOOL","debian_version":"$DEB_VER","ubuntu_version":"$UBU_VER","kali_version":"$KALI_VER","desktop_env":"$DESKTOP_ENV"}]"
           else
             # 并行模式：使用纯 bash 生成 JSON
             MATRIX="["
             FIRST_ITEM=true
-            
+
             # 分割字符串为数组
             IFS=',' read -ra SYS_ARRAY <<< "$SYS_TYPES"
             IFS=',' read -ra KERN_ARRAY <<< "$KERN_VERS"
             IFS=',' read -ra TOOL_ARRAY <<< "$BOOT_TOOLS"
             IFS=',' read -ra DEB_ARRAY <<< "$DEB_VERS"
             IFS=',' read -ra UBU_ARRAY <<< "$UBU_VERS"
-            
+            IFS=',' read -ra KALI_ARRAY <<< "$KALI_VERS"
+
             # 生成 Debian 组合
             for sys in "${SYS_ARRAY[@]}"; do
               if [[ "$sys" == debian-* ]]; then
@@ -139,13 +154,13 @@ jobs:
                       else
                         MATRIX="${MATRIX},"
                       fi
-                      MATRIX="${MATRIX}{\"system_type\":\"$sys\",\"kernel_version\":\"$kern\",\"bootstrap_tool\":\"$tool\",\"debian_version\":\"$deb_ver\",\"ubuntu_version\":\"\",\"desktop_env\":\"$DESKTOP_ENV\"}"
+                      MATRIX="${MATRIX}{\"system_type\":\"$sys\",\"kernel_version\":\"$kern\",\"bootstrap_tool\":\"$tool\",\"debian_version\":\"$deb_ver\",\"ubuntu_version\":\"\",\"kali_version\":\"\",\"desktop_env\":\"$DESKTOP_ENV\"}"
                     done
                   done
                 done
               fi
             done
-            
+
             # 生成 Ubuntu 组合
             for sys in "${SYS_ARRAY[@]}"; do
               if [[ "$sys" == ubuntu-* ]]; then
@@ -157,16 +172,34 @@ jobs:
                       else
                         MATRIX="${MATRIX},"
                       fi
-                      MATRIX="${MATRIX}{\"system_type\":\"$sys\",\"kernel_version\":\"$kern\",\"bootstrap_tool\":\"$tool\",\"debian_version\":\"\",\"ubuntu_version\":\"$ubu_ver\",\"desktop_env\":\"$DESKTOP_ENV\"}"
+                      MATRIX="${MATRIX}{\"system_type\":\"$sys\",\"kernel_version\":\"$kern\",\"bootstrap_tool\":\"$tool\",\"debian_version\":\"\",\"ubuntu_version\":\"$ubu_ver\",\"kali_version\":\"\",\"desktop_env\":\"$DESKTOP_ENV\"}"
                     done
                   done
                 done
               fi
             done
-            
+
+            # 生成 Kali 组合
+            for sys in "${SYS_ARRAY[@]}"; do
+              if [[ "$sys" == kali-* ]]; then
+                for kern in "${KERN_ARRAY[@]}"; do
+                  for tool in "${TOOL_ARRAY[@]}"; do
+                    for kali_ver in "${KALI_ARRAY[@]}"; do
+                      if [ "$FIRST_ITEM" = true ]; then
+                        FIRST_ITEM=false
+                      else
+                        MATRIX="${MATRIX},"
+                      fi
+                      MATRIX="${MATRIX}{\"system_type\":\"$sys\",\"kernel_version\":\"$kern\",\"bootstrap_tool\":\"$tool\",\"debian_version\":\"\",\"ubuntu_version\":\"\",\"kali_version\":\"$kali_ver\",\"desktop_env\":\"$DESKTOP_ENV\"}"
+                    done
+                  done
+                done
+              fi
+            done
+
             MATRIX="${MATRIX}]"
           fi
-          
+
           echo "Generated matrix: $MATRIX"
           echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
 
@@ -186,6 +219,7 @@ jobs:
       DESKTOP_ENV: ${{ matrix.desktop_env }}
       DEBIAN_VERSION: ${{ matrix.debian_version }}
       UBUNTU_VERSION: ${{ matrix.ubuntu_version }}
+      KALI_VERSION: ${{ matrix.kali_version }}
       KERNEL_REPO: ${{ github.event.inputs.kernel_repository || 'GengWei1997/linux-xiaomi-raphael-uboot' }}
 
     steps:
@@ -195,7 +229,7 @@ jobs:
       - name: 安装构建工具
         run: |
           echo "[$(date +'%Y-%m-%d %H:%M:%S')] 检查并安装构建工具: ${{ env.BOOTSTRAP_TOOL }}"
-          
+
           if [ "${{ env.BOOTSTRAP_TOOL }}" = "mmdebstrap" ]; then
             if ! command -v mmdebstrap &> /dev/null; then
               echo "[$(date +'%Y-%m-%d %H:%M:%S')]   安装 mmdebstrap 和依赖..."
@@ -204,6 +238,17 @@ jobs:
               echo "[$(date +'%Y-%m-%d %H:%M:%S')]   mmdebstrap 安装完成"
             else
               echo "[$(date +'%Y-%m-%d %H:%M:%S')]   mmdebstrap 已安装，跳过"
+            fi
+            # 安装 Kali archive keyring（如果构建 Kali）
+            if [[ "${{ env.SYSTEM_TYPE }}" == kali-* ]]; then
+              if ! dpkg -l kali-archive-keyring &>/dev/null; then
+                echo "[$(date +'%Y-%m-%d %H:%M:%S')]   安装 Kali archive keyring..."
+                # 尝试下载并安装 Kali keyring
+                curl -sL -o /tmp/kali-archive-keyring.deb                   "http://http.kali.org/pool/main/k/kali-archive-keyring/kali-archive-keyring_2024.1_all.deb"                   || curl -sL -o /tmp/kali-archive-keyring.deb                   "http://http.kali.org/pool/main/k/kali-archive-keyring/kali-archive-keyring_2022.1_all.deb"
+                sudo dpkg -i /tmp/kali-archive-keyring.deb || true
+                sudo apt-get install -f -y
+                echo "[$(date +'%Y-%m-%d %H:%M:%S')]   Kali archive keyring 安装完成"
+              fi
             fi
           else
             if ! command -v debootstrap &> /dev/null; then
@@ -222,25 +267,20 @@ jobs:
 
           echo "正在下载内核包和boot.img (版本: ${{ env.KERNEL_VERSION }})..."
 
-          curl -sL -o xiaomi-raphael-debs_${{ env.KERNEL_VERSION }}/linux-image-xiaomi-raphael.deb \
-            "https://github.com/${{ env.KERNEL_REPO }}/releases/download/kernel-v${{ env.KERNEL_VERSION }}/linux-image-xiaomi-raphael.deb" &
+          curl -sL -o xiaomi-raphael-debs_${{ env.KERNEL_VERSION }}/linux-image-xiaomi-raphael.deb             "https://github.com/${{ env.KERNEL_REPO }}/releases/download/kernel-v${{ env.KERNEL_VERSION }}/linux-image-xiaomi-raphael.deb" &
           PID1=$!
 
-          curl -sL -o xiaomi-raphael-debs_${{ env.KERNEL_VERSION }}/linux-headers-xiaomi-raphael.deb \
-            "https://github.com/${{ env.KERNEL_REPO }}/releases/download/kernel-v${{ env.KERNEL_VERSION }}/linux-headers-xiaomi-raphael.deb" &
+          curl -sL -o xiaomi-raphael-debs_${{ env.KERNEL_VERSION }}/linux-headers-xiaomi-raphael.deb             "https://github.com/${{ env.KERNEL_REPO }}/releases/download/kernel-v${{ env.KERNEL_VERSION }}/linux-headers-xiaomi-raphael.deb" &
           PID2=$!
 
-          curl -sL -o xiaomi-raphael-debs_${{ env.KERNEL_VERSION }}/firmware-xiaomi-raphael.deb \
-            "https://github.com/${{ env.KERNEL_REPO }}/releases/download/kernel-v${{ env.KERNEL_VERSION }}/firmware-xiaomi-raphael.deb" &
+          curl -sL -o xiaomi-raphael-debs_${{ env.KERNEL_VERSION }}/firmware-xiaomi-raphael.deb             "https://github.com/${{ env.KERNEL_REPO }}/releases/download/kernel-v${{ env.KERNEL_VERSION }}/firmware-xiaomi-raphael.deb" &
           PID3=$!
 
-          curl -sL -o xiaomi-k20pro-boot.img \
-            "https://github.com/GengWei1997/kernel-deb/releases/download/v1.0.0/xiaomi-k20pro-boot.img" &
+          curl -sL -o xiaomi-k20pro-boot.img             "https://github.com/GengWei1997/kernel-deb/releases/download/v1.0.0/xiaomi-k20pro-boot.img" &
           PID4=$!
 
           if [[ "${{ env.SYSTEM_TYPE }}" == *"phosh"* || "${{ env.SYSTEM_TYPE }}" == *"gnome"* ]]; then
-            curl -sL -o alsa-xiaomi-raphael.deb \
-              "https://github.com/${{ env.KERNEL_REPO }}/releases/download/kernel-v${{ env.KERNEL_VERSION }}/alsa-xiaomi-raphael.deb" &
+            curl -sL -o alsa-xiaomi-raphael.deb               "https://github.com/${{ env.KERNEL_REPO }}/releases/download/kernel-v${{ env.KERNEL_VERSION }}/alsa-xiaomi-raphael.deb" &
             PID5=$!
           fi
 
@@ -271,23 +311,23 @@ jobs:
 
           chmod +x build.sh
 
-          sudo BOOTSTRAP_TOOL="${{ env.BOOTSTRAP_TOOL }}" DEBIAN_VERSION="${{ env.DEBIAN_VERSION }}" UBUNTU_VERSION="${{ env.UBUNTU_VERSION }}" ./build.sh "${{ env.SYSTEM_TYPE }}" "${{ env.KERNEL_VERSION }}" "${{ env.DESKTOP_ENV }}" "${{ env.DEBIAN_VERSION || env.UBUNTU_VERSION }}"
+          sudo BOOTSTRAP_TOOL="${{ env.BOOTSTRAP_TOOL }}"                DEBIAN_VERSION="${{ env.DEBIAN_VERSION }}"                UBUNTU_VERSION="${{ env.UBUNTU_VERSION }}"                KALI_VERSION="${{ env.KALI_VERSION }}"                ./build.sh "${{ env.SYSTEM_TYPE }}" "${{ env.KERNEL_VERSION }}" "${{ env.DESKTOP_ENV }}" "${{ env.DEBIAN_VERSION || env.UBUNTU_VERSION || env.KALI_VERSION }}"
 
       - name: 生成产物文件名和校验和
         id: artifacts
         run: |
           # 构建产物标识名
-          OS_VER="${{ env.DEBIAN_VERSION || env.UBUNTU_VERSION }}"
+          OS_VER="${{ env.DEBIAN_VERSION || env.UBUNTU_VERSION || env.KALI_VERSION }}"
           FILENAME="rootfs-${{ env.SYSTEM_TYPE }}-${{ env.KERNEL_VERSION }}-${OS_VER}"
           [[ "${{ env.SYSTEM_TYPE }}" == *"phosh"* ]] && FILENAME="${FILENAME}-${{ env.DESKTOP_ENV }}"
-          
+
           echo "filename=${FILENAME}" >> $GITHUB_OUTPUT
           echo "artifact_name=${FILENAME}" >> $GITHUB_OUTPUT
-          
+
           # 生成校验和文件
           sha256sum rootfs.img xiaomi-k20pro-boot.img > ${FILENAME}.sha256
           cat ${FILENAME}.sha256
-          
+
           # 记录文件大小
           ROOTFS_SIZE=$(stat -c%s rootfs.img)
           echo "rootfs_size=${ROOTFS_SIZE}" >> $GITHUB_OUTPUT
@@ -333,11 +373,11 @@ jobs:
         id: release-info
         run: |
           TIMESTAMP=$(TZ='Asia/Shanghai' date +'%Y-%m-%d %H:%M:%S')
-          
+
           # 统一使用 latest 标签
           TAG="latest"
           RELEASE_TITLE="小米 Raphael 镜像构建"
-          
+
           echo "tag=${TAG}" >> $GITHUB_OUTPUT
           echo "name=${RELEASE_TITLE}" >> $GITHUB_OUTPUT
           echo "timestamp=${TIMESTAMP}" >> $GITHUB_OUTPUT
@@ -348,34 +388,34 @@ jobs:
           TIMESTAMP="${{ steps.release-info.outputs.timestamp }}"
           ARTIFACTS_DIR="artifacts"
           RELEASE_DIR="release-files"
-          
+
           # 创建统一发布目录
           mkdir -p "${RELEASE_DIR}"
-          
+
           # 初始化数组
           LARGE_FILES=""
           FILE_LIST=""
-          
+
           # GitHub Release 单个文件大小限制：2GB = 2147483648 字节
           SIZE_LIMIT=2147483648
-          
+
           # 遍历所有产物
           for artifact_dir in ${ARTIFACTS_DIR}/rootfs-*/; do
             [ -d "$artifact_dir" ] || continue
-            
+
             for file in "${artifact_dir}"*.7z; do
               [ -f "$file" ] || continue
-              
+
               filename=$(basename "$file")
               filesize=$(stat -c%s "$file")
-              
+
               # 解析文件名信息
               # 格式: rootfs-{system_type}-{kernel_version}-{os_version}[-{desktop_env}].7z
               IFS='-' read -ra PARTS <<< "${filename%.7z}"
               SYSTEM_TYPE="${PARTS[1]}"
               KERNEL_VER="${PARTS[2]}"
               OS_VER="${PARTS[3]}"
-              
+
               # 获取校验和
               shafile="${file%.7z}.sha256"
               if [ -f "$shafile" ]; then
@@ -383,10 +423,10 @@ jobs:
               else
                 SHA256=$(sha256sum "$file" | awk '{print $1}')
               fi
-              
+
               # 构建文件信息行
               FILE_INFO="| ${filename} | ${SYSTEM_TYPE} | ${KERNEL_VER} | ${OS_VER} |"
-              
+
               if [ "$filesize" -gt "$SIZE_LIMIT" ]; then
                 # 大文件：不加入 Release，保留在 Artifacts
                 LARGE_FILES="${LARGE_FILES}
@@ -399,17 +439,17 @@ jobs:
                 FILE_LIST="${FILE_LIST}
           - ✅ **${filename}**"
               fi
-              
+
               # 收集校验和信息
               SHA256_LIST="${SHA256_LIST}
           ${filename}: ${SHA256}"
             done
           done
-          
+
           # 列出要上传的文件
           echo "要上传到 Release 的文件:"
           ls -la ${RELEASE_DIR}/
-          
+
           {
             echo "large_files<<EOF"
             echo "$LARGE_FILES"
@@ -433,7 +473,7 @@ jobs:
           FILE_LIST="${{ steps.classify.outputs.file_list }}"
           LARGE_FILES="${{ steps.classify.outputs.large_files }}"
           SHA256_LIST="${{ steps.classify.outputs.sha256_list }}"
-          
+
           {
             echo "body<<EOF"
             echo "## 小米 Raphael (K20 Pro) 系统镜像集合"
