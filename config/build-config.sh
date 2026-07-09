@@ -1,13 +1,3 @@
-# 系统类型配置
-SYSTEM_TYPES="
-  debian-server
-  debian-gnome
-  debian-phosh
-  ubuntu-server
-  ubuntu-gnome
-  ubuntu-phosh
-"
-
 # 系统类型到基础设置的映射
 system_config() {
   case "$1" in
@@ -60,50 +50,5 @@ sources_config() {
     local version="${UBUNTU_VERSION:-resolute}"
     echo "UBUNTU_MIRROR=https://mirrors.tuna.tsinghua.edu.cn/ubuntu-ports/"
     echo "UBUNTU_SECURITY_MIRROR=http://ports.ubuntu.com/ubuntu-ports/"
-  fi
-}
-
-# 软件包配置
-get_packages() {
-  local system_type="$1"
-  local desktop_env="$2"
-  
-  base_packages="bash-completion sudo apt-utils ssh openssh-server nano network-manager initramfs-tools chrony curl wget locales tzdata dnsmasq nftables iproute2"
-  
-  if [[ "$system_type" == *"debian-"* ]]; then
-    base_packages="$base_packages fonts-wqy-microhei"
-  elif [[ "$system_type" == *"ubuntu-"* ]]; then
-    base_packages="$base_packages language-pack-zh-hans"
-  fi
-  
-  if [[ "$system_type" == *"server"* ]]; then
-    echo "$base_packages"
-  else
-    case "$desktop_env" in
-      "gnome")
-        echo "$base_packages gnome gnome-terminal gdm3"
-        ;;
-      "phosh-core")
-        if [[ "$system_type" == *"ubuntu-"* ]]; then
-          echo "$base_packages phosh phoc onboard"
-        elif [[ "$system_type" == *"debian-"* ]]; then
-          echo "$base_packages phosh phoc squeekboard"
-        fi
-        ;;
-      "phosh-full")
-        if [[ "$system_type" == *"ubuntu-"* ]]; then
-          echo "$base_packages phosh phoc onboard gnome-settings-daemon gnome-control-center"
-        elif [[ "$system_type" == *"debian-"* ]]; then
-          echo "$base_packages phosh phoc squeekboard gnome-settings-daemon gnome-control-center"
-        fi
-        ;;
-      "phosh-phone")
-        echo "$base_packages phosh phoc squeekboard gnome-settings-daemon gnome-control-center ofono mobian-tweaks"
-        ;;
-      *)
-        # 默认返回基础包
-        echo "$base_packages"
-        ;;
-    esac
   fi
 }

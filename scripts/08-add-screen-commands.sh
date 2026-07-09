@@ -1,9 +1,6 @@
 #!/bin/bash
 set -e
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-CONFIG_DIR="$SCRIPT_DIR/../config"
-
 echo "[$(date +'%Y-%m-%d %H:%M:%S')] [08] 🖥️ 添加屏幕管理命令"
 
 # 添加屏幕管理命令到全局bash配置

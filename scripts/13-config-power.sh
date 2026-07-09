@@ -18,26 +18,6 @@ network:
 EOF
 fi
 
-
-# 配置开机 15 秒后自动熄屏的 Systemd 服务
-cat > rootdir/etc/systemd/system/blank_screen.service << 'EOF'
-[Unit]
-Description=Auto-blank screen after 15s
-After=multi-user.target
-
-[Service]
-Type=simple
-ExecStartPre=/bin/bash -c "/usr/bin/sleep 15"
-ExecStart=sh -c 'TERM=linux setterm --blank force </dev/tty1'
-User=root
-Restart=on-failure
-RestartSec=5s
-
-[Install]
-WantedBy=multi-user.target
-EOF
-chroot rootdir systemctl enable blank_screen.service
-
 # 禁用 WiFi 省电模式，解决连接 WiFi 跳 ping 问题
 echo "[$(date +'%Y-%m-%d %H:%M:%S')] [13]   └─ 禁用 WiFi 省电模式"
 mkdir -p rootdir/etc/NetworkManager/conf.d

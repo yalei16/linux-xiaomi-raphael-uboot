@@ -1,11 +1,6 @@
 #!/bin/bash
 set -e
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-CONFIG_DIR="$SCRIPT_DIR/../config"
-
-. "$CONFIG_DIR/build-config.sh"
-
 SYSTEM_TYPE="${SYSTEM_TYPE:-ubuntu-server}"
 DESKTOP_ENV="${DESKTOP_ENV:-}"
 DEBIAN_VERSION="${DEBIAN_VERSION:-trixie}"

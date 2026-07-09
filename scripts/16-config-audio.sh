@@ -1,18 +1,18 @@
 #!/bin/bash
 set -e
 
-echo "[$(date +'%Y-%m-%d %H:%M:%S')] [15] 🔊 配置 WirePlumber 音频"
+echo "[$(date +'%Y-%m-%d %H:%M:%S')] [16] 🔊 配置 WirePlumber 音频"
 
 # 仅桌面版需要配置音频
 if [[ "$SYSTEM_TYPE" == *"server"* ]]; then
-    echo "[$(date +'%Y-%m-%d %H:%M:%S')] [15]   └─ 服务器版跳过音频配置"
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')] [16]   └─ 服务器版跳过音频配置"
     exit 0
 fi
 
-echo "[$(date +'%Y-%m-%d %H:%M:%S')] [15]   └─ 创建 WirePlumber 配置目录"
+echo "[$(date +'%Y-%m-%d %H:%M:%S')] [16]   └─ 创建 WirePlumber 配置目录"
 mkdir -p rootdir/etc/wireplumber/wireplumber.conf.d
 
-echo "[$(date +'%Y-%m-%d %H:%M:%S')] [15]   └─ 配置 ALSA 音频参数"
+echo "[$(date +'%Y-%m-%d %H:%M:%S')] [16]   └─ 配置 ALSA 音频参数"
 cat > rootdir/etc/wireplumber/wireplumber.conf.d/51-disable-suspension.conf << 'EOF'
 monitor.alsa.rules = [
   {
@@ -42,4 +42,4 @@ monitor.alsa.rules = [
 ]
 EOF
 
-echo "[$(date +'%Y-%m-%d %H:%M:%S')] [15] ✅ 音频配置完成"
+echo "[$(date +'%Y-%m-%d %H:%M:%S')] [16] ✅ 音频配置完成"
