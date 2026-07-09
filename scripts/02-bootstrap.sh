@@ -1,73 +1,52 @@
 #!/bin/bash
 set -e
 
-echo "[$(date +'%Y-%m-%d %H:%M:%S')] 📦 开始构建基础系统..."
+echo "[$(date +'%Y-%m-%d %H:%M:%S')] 📋 配置 apt 软件源..."
 
-# 检查 rootdir 是否存在
-if [ -d "rootdir" ]; then
-    echo "[$(date +'%Y-%m-%d %H:%M:%S')] 🧹 清理旧的 rootdir..."
-    sudo rm -rf rootdir
+# 根据发行版配置不同的源
+if [[ "$SYSTEM_TYPE" == debian-* ]]; then
+    cat > rootdir/etc/apt/sources.list <<EOF
+deb https://mirrors.tuna.tsinghua.edu.cn/debian $SUITE main contrib non-free non-free-firmware
+deb https://mirrors.tuna.tsinghua.edu.cn/debian $SUITE-updates main contrib non-free non-free-firmware
+deb https://mirrors.tuna.tsinghua.edu.cn/debian-security $SUITE-security main contrib non-free non-free-firmware
+EOF
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')]   Debian 源已配置"
+
+elif [[ "$SYSTEM_TYPE" == ubuntu-* ]]; then
+    cat > rootdir/etc/apt/sources.list <<EOF
+deb https://mirrors.tuna.tsinghua.edu.cn/ubuntu $SUITE main restricted universe multiverse
+deb https://mirrors.tuna.tsinghua.edu.cn/ubuntu $SUITE-updates main restricted universe multiverse
+deb https://mirrors.tuna.tsinghua.edu.cn/ubuntu $SUITE-security main restricted universe multiverse
+EOF
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')]   Ubuntu 源已配置"
+
+elif [[ "$SYSTEM_TYPE" == kali-* ]]; then
+    # Kali 使用官方源或国内镜像
+    cat > rootdir/etc/apt/sources.list <<EOF
+deb https://mirrors.ustc.edu.cn/kali kali-rolling main contrib non-free non-free-firmware
+# deb http://http.kali.org/kali kali-rolling main contrib non-free non-free-firmware
+EOF
+
+    # Kali 需要禁用 Valid-Until 检查（滚动发行版）
+    cat > rootdir/etc/apt/apt.conf.d/99kali <<EOF
+Acquire::Check-Valid-Until "false";
+Acquire::AllowInsecureRepositories "false";
+EOF
+
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')]   Kali 源已配置"
 fi
 
-mkdir -p rootdir
+# 配置 apt 偏好
+mkdir -p rootdir/etc/apt/apt.conf.d
+cat > rootdir/etc/apt/apt.conf.d/99custom <<EOF
+APT::Install-Recommends "false";
+APT::Install-Suggests "false";
+APT::Get::Assume-Yes "true";
+APT::Get::AllowUnauthenticated "false";
+DPkg::Options {"--force-confdef";"--force-confold"};
+EOF
 
-BOOTSTRAP_TOOL="${BOOTSTRAP_TOOL:-mmdebstrap}"
+# 更新 apt 缓存
+chroot rootdir apt-get update
 
-if [ "$BOOTSTRAP_TOOL" = "mmdebstrap" ]; then
-    echo "[$(date +'%Y-%m-%d %H:%M:%S')] 使用 mmdebstrap 构建..."
-    echo "[$(date +'%Y-%m-%d %H:%M:%S')]   Suite: $SUITE"
-    echo "[$(date +'%Y-%m-%d %H:%M:%S')]   Mirror: $MIRROR"
-    echo "[$(date +'%Y-%m-%d %H:%M:%S')]   Components: $COMPONENTS"
-
-    # 基础包列表
-    BASE_PACKAGES="openssh-server,sudo,net-tools,iputils-ping,dnsutils,curl,wget,htop,vim,nano,usbutils,pciutils,i2c-tools,parted,gdisk,f2fs-tools,e2fsprogs,dosfstools,wireless-tools,wpasupplicant,iw,rfkill,bluez,bluetooth,libpam-systemd,systemd-timesyncd,dbus,polkitd,locales,console-setup,keyboard-configuration,firmware-linux-free,firmware-misc-nonfree,firmware-realtek,firmware-atheros,firmware-brcm80211,firmware-libertas,firmware-ti-connectivity,firmware-zd1211,linux-firmware,mesa-vulkan-drivers,libglx-mesa0,libgl1-mesa-dri,libglx0,libegl1,libgles2,mesa-utils,wayland-protocols,libwayland-client0,libwayland-server0,libwayland-cursor0,libwayland-egl1,libwayland-bin,xwayland,pulseaudio,pulseaudio-utils,alsa-utils,libpam-fprintd,fprintd"
-
-    # 添加额外包
-    if [ -n "$EXTRA_PACKAGES" ]; then
-        PACKAGES="$BASE_PACKAGES,$EXTRA_PACKAGES"
-    else
-        PACKAGES="$BASE_PACKAGES"
-    fi
-
-    echo "[$(date +'%Y-%m-%d %H:%M:%S')]   安装包数量: $(echo "$PACKAGES" | tr ',' '\n' | wc -l)"
-
-    # 构建 mmdebstrap 参数
-    MM_ARGS="--variant=standard --components=$COMPONENTS"
-
-    # 如果有 keyring 参数则添加
-    if [ -n "$KEYRING_ARG" ]; then
-        MM_ARGS="$MM_ARGS $KEYRING_ARG"
-        echo "[$(date +'%Y-%m-%d %H:%M:%S')]   使用自定义 keyring"
-    fi
-
-    # Kali 可能需要跳过 Valid-Until 检查
-    if [[ "$SYSTEM_TYPE" == kali-* ]]; then
-        MM_ARGS="$MM_ARGS --aptopt=Acquire::Check-Valid-Until=false"
-    fi
-
-    sudo mmdebstrap \
-        $MM_ARGS \
-        --include="$PACKAGES" \
-        "$SUITE" \
-        rootdir/ \
-        "$MIRROR"
-
-else
-    echo "[$(date +'%Y-%m-%d %H:%M:%S')] 使用 debootstrap 构建..."
-
-    DEB_ARGS="--components=$COMPONENTS"
-
-    if [ -n "$KEYRING_ARG" ]; then
-        # debootstrap 的 keyring 参数格式不同
-        KEYRING_FILE=$(echo "$KEYRING_ARG" | sed 's/--keyring=//')
-        DEB_ARGS="$DEB_ARGS --keyring=$KEYRING_FILE"
-    fi
-
-    sudo debootstrap \
-        $DEB_ARGS \
-        "$SUITE" \
-        rootdir/ \
-        "$MIRROR"
-fi
-
-echo "[$(date +'%Y-%m-%d %H:%M:%S')] ✅ 基础系统构建完成"
+echo "[$(date +'%Y-%m-%d %H:%M:%S')] ✅ apt 配置完成"
