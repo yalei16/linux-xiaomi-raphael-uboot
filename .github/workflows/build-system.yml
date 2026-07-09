@@ -12,9 +12,9 @@ on:
           - single
         default: 'parallel'
       system_types:
-        description: '系统类型 (用逗号分隔多个值，如: debian-server,debian-gnome)'
+        description: '系统类型 (用逗号分隔多个值)'
         required: false
-        default: 'debian-server,debian-gnome,debian-phosh,ubuntu-server,ubuntu-gnome,ubuntu-phosh,kali-server,kali-gnome'
+        default: 'debian-server,debian-gnome,debian-phosh,ubuntu-server,ubuntu-gnome,ubuntu-phosh,kali-gnome'
         type: string
       kernel_versions:
         description: '内核版本 (默认7.1)'
@@ -244,7 +244,10 @@ jobs:
               if ! dpkg -l kali-archive-keyring &>/dev/null; then
                 echo "[$(date +'%Y-%m-%d %H:%M:%S')]   安装 Kali archive keyring..."
                 # 尝试下载并安装 Kali keyring
-                curl -sL -o /tmp/kali-archive-keyring.deb                   "http://http.kali.org/pool/main/k/kali-archive-keyring/kali-archive-keyring_2024.1_all.deb"                   || curl -sL -o /tmp/kali-archive-keyring.deb                   "http://http.kali.org/pool/main/k/kali-archive-keyring/kali-archive-keyring_2022.1_all.deb"
+                curl -sL -o /tmp/kali-archive-keyring.deb \
+                  "http://http.kali.org/pool/main/k/kali-archive-keyring/kali-archive-keyring_2024.1_all.deb" \
+                  || curl -sL -o /tmp/kali-archive-keyring.deb \
+                  "http://http.kali.org/pool/main/k/kali-archive-keyring/kali-archive-keyring_2022.1_all.deb"
                 sudo dpkg -i /tmp/kali-archive-keyring.deb || true
                 sudo apt-get install -f -y
                 echo "[$(date +'%Y-%m-%d %H:%M:%S')]   Kali archive keyring 安装完成"
@@ -267,20 +270,25 @@ jobs:
 
           echo "正在下载内核包和boot.img (版本: ${{ env.KERNEL_VERSION }})..."
 
-          curl -sL -o xiaomi-raphael-debs_${{ env.KERNEL_VERSION }}/linux-image-xiaomi-raphael.deb             "https://github.com/${{ env.KERNEL_REPO }}/releases/download/kernel-v${{ env.KERNEL_VERSION }}/linux-image-xiaomi-raphael.deb" &
+          curl -sL -o xiaomi-raphael-debs_${{ env.KERNEL_VERSION }}/linux-image-xiaomi-raphael.deb \
+            "https://github.com/${{ env.KERNEL_REPO }}/releases/download/kernel-v${{ env.KERNEL_VERSION }}/linux-image-xiaomi-raphael.deb" &
           PID1=$!
 
-          curl -sL -o xiaomi-raphael-debs_${{ env.KERNEL_VERSION }}/linux-headers-xiaomi-raphael.deb             "https://github.com/${{ env.KERNEL_REPO }}/releases/download/kernel-v${{ env.KERNEL_VERSION }}/linux-headers-xiaomi-raphael.deb" &
+          curl -sL -o xiaomi-raphael-debs_${{ env.KERNEL_VERSION }}/linux-headers-xiaomi-raphael.deb \
+            "https://github.com/${{ env.KERNEL_REPO }}/releases/download/kernel-v${{ env.KERNEL_VERSION }}/linux-headers-xiaomi-raphael.deb" &
           PID2=$!
 
-          curl -sL -o xiaomi-raphael-debs_${{ env.KERNEL_VERSION }}/firmware-xiaomi-raphael.deb             "https://github.com/${{ env.KERNEL_REPO }}/releases/download/kernel-v${{ env.KERNEL_VERSION }}/firmware-xiaomi-raphael.deb" &
+          curl -sL -o xiaomi-raphael-debs_${{ env.KERNEL_VERSION }}/firmware-xiaomi-raphael.deb \
+            "https://github.com/${{ env.KERNEL_REPO }}/releases/download/kernel-v${{ env.KERNEL_VERSION }}/firmware-xiaomi-raphael.deb" &
           PID3=$!
 
-          curl -sL -o xiaomi-k20pro-boot.img             "https://github.com/GengWei1997/kernel-deb/releases/download/v1.0.0/xiaomi-k20pro-boot.img" &
+          curl -sL -o xiaomi-k20pro-boot.img \
+            "https://github.com/GengWei1997/kernel-deb/releases/download/v1.0.0/xiaomi-k20pro-boot.img" &
           PID4=$!
 
           if [[ "${{ env.SYSTEM_TYPE }}" == *"phosh"* || "${{ env.SYSTEM_TYPE }}" == *"gnome"* ]]; then
-            curl -sL -o alsa-xiaomi-raphael.deb               "https://github.com/${{ env.KERNEL_REPO }}/releases/download/kernel-v${{ env.KERNEL_VERSION }}/alsa-xiaomi-raphael.deb" &
+            curl -sL -o alsa-xiaomi-raphael.deb \
+              "https://github.com/${{ env.KERNEL_REPO }}/releases/download/kernel-v${{ env.KERNEL_VERSION }}/alsa-xiaomi-raphael.deb" &
             PID5=$!
           fi
 
@@ -311,7 +319,11 @@ jobs:
 
           chmod +x build.sh
 
-          sudo BOOTSTRAP_TOOL="${{ env.BOOTSTRAP_TOOL }}"                DEBIAN_VERSION="${{ env.DEBIAN_VERSION }}"                UBUNTU_VERSION="${{ env.UBUNTU_VERSION }}"                KALI_VERSION="${{ env.KALI_VERSION }}"                ./build.sh "${{ env.SYSTEM_TYPE }}" "${{ env.KERNEL_VERSION }}" "${{ env.DESKTOP_ENV }}" "${{ env.DEBIAN_VERSION || env.UBUNTU_VERSION || env.KALI_VERSION }}"
+          sudo BOOTSTRAP_TOOL="${{ env.BOOTSTRAP_TOOL }}" \
+               DEBIAN_VERSION="${{ env.DEBIAN_VERSION }}" \
+               UBUNTU_VERSION="${{ env.UBUNTU_VERSION }}" \
+               KALI_VERSION="${{ env.KALI_VERSION }}" \
+               ./build.sh "${{ env.SYSTEM_TYPE }}" "${{ env.KERNEL_VERSION }}" "${{ env.DESKTOP_ENV }}" "${{ env.DEBIAN_VERSION || env.UBUNTU_VERSION || env.KALI_VERSION }}"
 
       - name: 生成产物文件名和校验和
         id: artifacts
@@ -324,19 +336,20 @@ jobs:
           echo "filename=${FILENAME}" >> $GITHUB_OUTPUT
           echo "artifact_name=${FILENAME}" >> $GITHUB_OUTPUT
 
-          # 生成校验和文件
-          sha256sum rootfs.img xiaomi-k20pro-boot.img > ${FILENAME}.sha256
+          # 生成校验和文件（同时校验 tar.gz 和 boot.img）
+          sha256sum rootfs.tar.gz xiaomi-k20pro-boot.img > ${FILENAME}.sha256
           cat ${FILENAME}.sha256
 
           # 记录文件大小
-          ROOTFS_SIZE=$(stat -c%s rootfs.img)
+          ROOTFS_SIZE=$(stat -c%s rootfs.tar.gz)
           echo "rootfs_size=${ROOTFS_SIZE}" >> $GITHUB_OUTPUT
 
-      - name: 压缩镜像
+      - name: 压缩产物
         run: |
           FILENAME="${{ steps.artifacts.outputs.filename }}"
           echo "压缩为 ${FILENAME}.7z ..."
-          7z a "${FILENAME}.7z" rootfs.img xiaomi-k20pro-boot.img
+          # 打包 tar.gz + boot.img
+          7z a "${FILENAME}.7z" rootfs.tar.gz xiaomi-k20pro-boot.img
           ls -lh "${FILENAME}.7z"
 
       - name: 上传产物到 Artifacts
@@ -354,7 +367,7 @@ jobs:
           sudo rm -f alsa-xiaomi-raphael.deb 2>/dev/null || true
           sudo rm -rf rootdir 2>/dev/null || true
           rm -rf xiaomi-raphael-debs_* 2>/dev/null || true
-          rm -f rootfs.img xiaomi-k20pro-boot.img 2>/dev/null || true
+          rm -f rootfs.img rootfs.tar.gz xiaomi-k20pro-boot.img 2>/dev/null || true
 
   release:
     needs: [generate-matrix, build]
@@ -486,9 +499,9 @@ jobs:
             echo "$FILE_LIST"
             echo ""
             echo "### 🔒 SHA256 校验和"
-            echo "\`\`\`"
+            echo '```'
             echo "$SHA256_LIST"
-            echo "\`\`\`"
+            echo '```'
             echo ""
             if [ -n "$LARGE_FILES" ]; then
               echo "### ⚠️ 大文件提示"
@@ -503,6 +516,10 @@ jobs:
             echo "### 🌐 网络连接 (USB NCM)"
             echo "- 设备 IP: \`172.16.42.1\`"
             echo "- SSH 命令: \`ssh user@172.16.42.1\`"
+            echo ""
+            echo "### ⌨️ Kali GNOME 虚拟键盘"
+            echo "- 触摸屏点击输入框时 onboard 虚拟键盘会自动弹出"
+            echo "- 如果未自动弹出，按 Super 键搜索 onboard 手动启动"
             echo ""
             echo "---"
             echo "*Built with ❤️ by GitHub Actions*"
