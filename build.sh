@@ -14,6 +14,9 @@ if [[ "$SYSTEM_TYPE" == *"debian-"* ]]; then
 elif [[ "$SYSTEM_TYPE" == *"ubuntu-"* ]]; then
     UBUNTU_VERSION="${UBUNTU_VERSION:?请设置 UBUNTU_VERSION 环境变量}"
     export UBUNTU_VERSION
+elif [[ "$SYSTEM_TYPE" == *"kali-"* ]]; then
+    KALI_VERSION="${KALI_VERSION:-kali-rolling}"
+    export KALI_VERSION
 fi
 
 # 解析构建模式参数
@@ -64,6 +67,8 @@ if [ -n "$DEBIAN_VERSION" ]; then
     echo "[$(date +'%Y-%m-%d %H:%M:%S')] Debian 版本:   $DEBIAN_VERSION 🐧"
 elif [ -n "$UBUNTU_VERSION" ]; then
     echo "[$(date +'%Y-%m-%d %H:%M:%S')] Ubuntu 版本:   $UBUNTU_VERSION 🦁"
+elif [ -n "$KALI_VERSION" ]; then
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')] Kali 版本:     $KALI_VERSION 🐉"
 fi
 echo "[$(date +'%Y-%m-%d %H:%M:%S')] 镜像大小:      $IMAGE_SIZE 💾"
 if [ "$IS_DESKTOP" = "true" ]; then
@@ -114,6 +119,7 @@ echo "[$(date +'%Y-%m-%d %H:%M:%S')] ========================================== 
 echo ""
 echo "[$(date +'%Y-%m-%d %H:%M:%S')] 📦 产物文件:"
 ls -lh rootfs.img 2>/dev/null || true
+ls -lh rootfs.tar.gz 2>/dev/null || true
 ls -lh rootfs.7z 2>/dev/null || true
 echo ""
 echo "[$(date +'%Y-%m-%d %H:%M:%S')] ✅ 构建成功完成!"
